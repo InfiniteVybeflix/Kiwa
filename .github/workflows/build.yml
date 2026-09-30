@@ -48,13 +48,14 @@ jobs:
         ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
       continue-on-error: true
 
-    - name: Locate APK
+    - name: Locate APK and rename
       if: steps.build.outcome == 'success'
       id: locate
       run: |
         APK=$(find . -name "*.apk" -path "*debug*" | head -1)
         echo "Found: $APK"
-        echo "apk_path=$APK" >> $GITHUB_OUTPUT
+        cp "$APK" "/tmp/Kiwa-v1.0.0.apk"
+        echo "apk_path=/tmp/Kiwa-v1.0.0.apk" >> $GITHUB_OUTPUT
 
     - name: Upload build log
       if: always()
