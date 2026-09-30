@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,11 +27,9 @@ jobs:
         curl -L -o /tmp/apk/collabora.apk \
           "https://www.collaboraoffice.com/downloads/Collabora-Office-Android-Release/collabora-office-mobile-26.04.3.1-155-release-arm64-v8a-2026-09-03.apk"
 
-        # Native libraries
         mkdir -p lib/src/main/cpp/lib/arm64-v8a
         unzip -j -o /tmp/apk/collabora.apk "lib/arm64-v8a/*.so" -d lib/src/main/cpp/lib/arm64-v8a/
 
-        # Assets
         rm -rf lib/src/main/assets
         mkdir -p /tmp/apk/extracted
         unzip -o -q /tmp/apk/collabora.apk "assets/*" -d /tmp/apk/extracted/
@@ -47,6 +48,14 @@ jobs:
         ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
       continue-on-error: true
 
+    - name: Locate APK
+      if: steps.build.outcome == 'success'
+      id: locate
+      run: |
+        APK=$(find . -name "*.apk" -path "*debug*" | head -1)
+        echo "Found: $APK"
+        echo "apk_path=$APK" >> $GITHUB_OUTPUT
+
     - name: Upload build log
       if: always()
       uses: actions/upload-artifact@v4
@@ -55,13 +64,26 @@ jobs:
         path: build.log
         if-no-files-found: warn
 
-    - name: Upload APK
+    - name: Upload APK as artifact
       if: steps.build.outcome == 'success'
       uses: actions/upload-artifact@v4
       with:
         name: kiwa-debug-apk
-        path: build/app/outputs/apk/debug/*.apk
+        path: ${{ steps.locate.outputs.apk_path }}
         if-no-files-found: error
+
+    - name: Publish to rolling release
+      if: steps.build.outcome == 'success'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: latest
+        name: "Kiwa — latest build"
+        body: |
+          Automatic build from commit ${{ github.sha }}
+          Built: ${{ github.event.head_commit.timestamp }}
+        files: ${{ steps.locate.outputs.apk_path }}
+        prerelease: true
+        make_latest: true
 
     - name: Fail if build failed
       if: steps.build.outcome != 'success'
