@@ -18,8 +18,16 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Set up Android SDK
-      uses: android-actions/setup-android@v3
+    - name: Show environment
+      run: |
+        echo "ANDROID_HOME=$ANDROID_HOME"
+        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+        ls -la $ANDROID_HOME 2>/dev/null || echo "no ANDROID_HOME"
+        ls -la /usr/local/lib/android/sdk 2>/dev/null || echo "no default sdk"
+        echo "--- JAVA ---"
+        java -version
+        echo "--- OS ---"
+        cat /etc/os-release | head -3
 
     - name: Download engine (.so)
       run: |
@@ -28,13 +36,30 @@ jobs:
           https://github.com/InfiniteVybeflix/Kiwa/releases/download/engine-v26.04.3.1/liblo-native-code.so
 
     - name: Build Debug APK
+      id: build
       run: |
         chmod +x gradlew
-        ./gradlew assembleDebug --no-daemon --stacktrace
+        ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+      continue-on-error: true
+
+    - name: Upload build log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-log
+        path: build.log
+        if-no-files-found: warn
 
     - name: Upload APK
+      if: steps.build.outcome == 'success'
       uses: actions/upload-artifact@v4
       with:
         name: kiwa-debug-apk
         path: app/build/outputs/apk/debug/*.apk
         if-no-files-found: error
+
+    - name: Fail if build failed
+      if: steps.build.outcome != 'success'
+      run: |
+        echo "Build failed. See build-log artifact."
+        exit 1
