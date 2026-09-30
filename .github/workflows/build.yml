@@ -18,22 +18,27 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Show environment
+    - name: Fetch engine and assets from official APK
       run: |
-        echo "ANDROID_HOME=$ANDROID_HOME"
-        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-        ls -la $ANDROID_HOME 2>/dev/null || echo "no ANDROID_HOME"
-        ls -la /usr/local/lib/android/sdk 2>/dev/null || echo "no default sdk"
-        echo "--- JAVA ---"
-        java -version
-        echo "--- OS ---"
-        cat /etc/os-release | head -3
+        mkdir -p /tmp/apk
+        curl -L -o /tmp/apk/collabora.apk \
+          "https://www.collaboraoffice.com/downloads/Collabora-Office-Android-Release/collabora-office-mobile-26.04.3.1-155-release-arm64-v8a-2026-09-03.apk"
 
-    - name: Download engine (.so)
-      run: |
+        # Native libraries
         mkdir -p lib/src/main/cpp/lib/arm64-v8a
-        curl -L -o lib/src/main/cpp/lib/arm64-v8a/liblo-native-code.so \
-          https://github.com/InfiniteVybeflix/Kiwa/releases/download/engine-v26.04.3.1/liblo-native-code.so
+        unzip -j -o /tmp/apk/collabora.apk "lib/arm64-v8a/*.so" -d lib/src/main/cpp/lib/arm64-v8a/
+
+        # Assets
+        rm -rf lib/src/main/assets
+        mkdir -p /tmp/apk/extracted
+        unzip -o -q /tmp/apk/collabora.apk "assets/*" -d /tmp/apk/extracted/
+        mkdir -p lib/src/main/assets
+        cp -r /tmp/apk/extracted/assets/. lib/src/main/assets/
+
+        echo "=== Native libs ==="
+        ls -lh lib/src/main/cpp/lib/arm64-v8a/
+        echo "=== Assets size ==="
+        du -sh lib/src/main/assets/
 
     - name: Build Debug APK
       id: build
@@ -60,6 +65,4 @@ jobs:
 
     - name: Fail if build failed
       if: steps.build.outcome != 'success'
-      run: |
-        echo "Build failed. See build-log artifact."
-        exit 1
+      run: exit 1

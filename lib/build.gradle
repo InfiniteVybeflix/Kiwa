@@ -347,3 +347,18 @@ afterEvaluate {
         dependsOn copyDocTemplates
     }
 }
+
+// --- Kiwa override: disable tasks that expect a local engine build tree ---
+// Assets and native libraries are extracted from the official Collabora APK
+// in CI, so these tasks (which reference the non-existent instdir/ paths)
+// must not run.
+afterEvaluate {
+    ['copyAssets', 'createFullConfig', 'copyBrandTheme',
+     'generateCoolDebugAssets', 'generateCoolReleaseAssets'].each { name ->
+        def t = tasks.findByName(name)
+        if (t != null) {
+            t.enabled = false
+            println "Kiwa: disabled task ${name}"
+        }
+    }
+}
