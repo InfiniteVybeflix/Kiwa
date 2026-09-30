@@ -1,0 +1,28 @@
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+bin/
+gen/
+out/
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Native
+*.so
+*.o
+*.a
+
+# Large files (engine goes as release asset, not in git)
+liblo-native-code.so
+
+# Signing
+*.keystore
+*.jks
+keystore.properties
