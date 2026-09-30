@@ -2,7 +2,7 @@ ext {
     coAppName         = 'Kiwa'
     coVendor          = 'Aevibron'
     coInfoURL         = 'https://github.com/InfiniteVybeflix/Kiwa'
-    coLauncherIcon    = 'mipmap/ic_launcher'
+    coLauncherIcon    = '@mipmap/ic_launcher'
     coHasBranding     = 'false'
     coBrandingDir     = ''
     coVersionHash     = 'unknown'
