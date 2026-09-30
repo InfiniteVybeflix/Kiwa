@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="loading">Завантаження...</string>
+    <string name="preparing_for_the_first_start_after_an_update">Підготовка до першого запуску після оновлення.</string>
+    <string name="saving">Збереження...</string>
+    <string name="cannot_open_file_chooser">Не вдалося відкрити переглядач файлів</string>
+    <string name="failed_to_insert_image">Помилка вставки зображення</string>
+    <string name="failed_to_load_file">Помилка визначення файлу для завантаження</string>
+    <string name="storage_permission_required">Необхідний дозвіл на збереження</string>
+    <string name="temp_file_saving_disabled">Цей файл лише для читання за оригінальнім додатком. Використовуйте \"Редагувати копію\" щоб зробити зміни.</string>
+    <string name="exiting">Виходимо...</string>
+    <string name="rate_our_app_text">Якщо вам це подобається, будь ласка, поставте нам 5 зірочок в Google Play. Ваші гарні відгуки - наша найкраща мотивація.</string>
+    <string name="rate_our_app_title">Дякуємо за використання %1$s!</string>
+    <string name="later">Пізніше</string>
+    <string name="rate_now">Оцінити зараз</string>
+    <string name="file_chromeos_read_only">Цей файл неможливо зберегти за вказаним призначенням, відкриваю в режимі читання. Перемістіть його до Play файлів для повного доступу до операцій читання/запису.</string>
+    <string name="ask_for_copy">Цей документ доступний лише для читання. Створити копію для редагування?</string>
+    <string name="edit_copy">Змінити копію</string>
+    <string name="view_only">Лише перегляд</string>
+    <string name="restarting">Перезапуск...</string>
+    <string name="cant_open_the_document">Не вдалося відкрити документ</string>
+    <string name="convert_odf_message">Цей документ може містити форматування або вміст, який не можна зберегти у вибраному форматі файлу \"Текст\".</string>
+    <string name="ask_for_convert_odf">Підтвердьте Формат Файлу</string>
+    <string name="use_odf">Використати Формат ODF</string>
+    <string name="use_text">Використати Текстовий Формат</string>
+    <string name="all_files_access_title">Відкрито в режимі лише для читання</string>
+    <string name="all_files_access_message">Застосунок, який надіслав цей файл, не дозволив зберегти зміни в ньому.\n\nНадайте дозвіл «Доступ до всіх файлів», щоб цей застосунок міг записувати дані у файл у місці його зберігання, і ви змогли редагувати його тут.</string>
+    <string name="all_files_access_grant">Дозволити доступ</string>
+    <string name="do_not_ask_again">Більше не запитувати</string>
+    <string name="failed_to_save_file">Не вдалося зберегти зміни у файлі</string>
+</resources>

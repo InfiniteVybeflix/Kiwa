@@ -1,26 +1,26 @@
-# Android
+# Build outputs
 *.apk
 *.aab
-*.ap_
 *.dex
 *.class
 bin/
 gen/
 out/
-.gradle/
 build/
+.gradle/
 local.properties
 *.iml
 .idea/
 .DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
 
-# Native
+# Native — ignore most, but keep our bundled libs
 *.so
-*.o
-*.a
-
-# Large files (engine goes as release asset, not in git)
-liblo-native-code.so
+!lib/src/main/cpp/lib/arm64-v8a/*.so
+# The engine is a release asset, not in git
+lib/src/main/cpp/lib/arm64-v8a/liblo-native-code.so
 
 # Signing
 *.keystore

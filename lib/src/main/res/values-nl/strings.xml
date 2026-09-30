@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="loading">Laden...</string>
+    <string name="cannot_open_file_chooser">De bestandskiezer kan niet worden geopend</string>
+    <string name="failed_to_insert_image">De afbeelding kan niet worden invoegd</string>
+    <string name="failed_to_load_file">Het te laden bestand is niet gevonden</string>
+    <string name="storage_permission_required">Rechten om op te slaan zijn vereist</string>
+    <string name="temp_file_saving_disabled">Door de bronappb gedeeld als alleen-lezen. Gebruik \"Een kopie bewerken\" om wijzigingen aan te brengen.</string>
+    <string name="saving">Opslaan...</string>
+    <string name="preparing_for_the_first_start_after_an_update">Voorbereiding voor de eerste start na een update.</string>
+    <string name="rate_our_app_text">Als je enthousiast bent, geef dan alsjeblieft 5 sterren in Google Play. Jouw goede recensies zijn onze beste motivatie.</string>
+    <string name="rate_our_app_title">Bedankt voor het gebruiken van %1$s!</string>
+    <string name="later">Later</string>
+    <string name="rate_now">Beoordeel nu</string>
+    <string name="exiting">Afsluiten...</string>
+    <string name="ask_for_copy">Dit document is alleen-lezen. Wil je een kopie maken om te bewerken?</string>
+    <string name="edit_copy">Bewerk een kopie</string>
+    <string name="view_only">Alleen bekijken</string>
+    <string name="restarting">Opnieuw starten...</string>
+    <string name="file_chromeos_read_only">Het bestand kan op deze locatie niet worden bewaard; het wordt alleen-lezen geopend. Verplaats het naar Play-bestanden voor volledige lees- en schrijftoegang.</string>
+    <string name="use_text">Gebruik Tekst-opmaak</string>
+    <string name="convert_odf_message">Dit document bevat mogelijk opmaak of inhoud die niet kan worden bewaard in het nu gekozen formaat \'Tekst\'.</string>
+    <string name="ask_for_convert_odf">Bestandsformaat bevestigen</string>
+    <string name="use_odf">ODF-formaat gebruiken</string>
+    <string name="cant_open_the_document">Kon het document niet openen</string>
+    <string name="all_files_access_title">Geopend in alleen-lezenmodus</string>
+    <string name="all_files_access_message">De app die dit bestand deelde, stond niet toe dat er wijzigingen in werden opgeslagen.\n\nVerleen \"Volledige bestandstoegang\" om deze app het bestand te laten schrijven waar het is opgeslagen, zodat u het hier kunt bewerken.</string>
+    <string name="all_files_access_grant">Toegang verlenen</string>
+    <string name="do_not_ask_again">Niet meer vragen</string>
+    <string name="failed_to_save_file">Kon de wijzigingen in het bestand niet opslaan</string>
+</resources>
