@@ -1,0 +1,15 @@
+ext {
+    coAppName         = 'Kiwa'
+    coVendor          = 'Aevibron'
+    coInfoURL         = 'https://github.com/InfiniteVybeflix/Kiwa'
+    coLauncherIcon    = 'mipmap/ic_launcher'
+    coHasBranding     = 'false'
+    coBrandingDir     = ''
+    coVersionHash     = 'unknown'
+    coAbiSplit        = ['arm64-v8a']
+}
+android.defaultConfig {
+    applicationId 'com.aevibron.kiwa'
+    versionCode 1
+    versionName '1.0.0'
+}

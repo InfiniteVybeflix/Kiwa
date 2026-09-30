@@ -1,0 +1,13 @@
+ext {
+    coAppName         = 'Kiwa'
+    coSrcRoot         = ''
+    coInstdir         = ''
+    coExampleDocument = ''
+    coVersionMajor    = '26'
+    coVersionMinor    = '04'
+    coVersionHash     = 'unknown'
+    coApplicationId   = 'com.aevibron.kiwa'
+    coBrandingDir     = ''
+    coGooglePlay      = 'false'
+    coAbiSplit        = ['arm64-v8a']
+}
