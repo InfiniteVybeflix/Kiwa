@@ -514,15 +514,11 @@ public class LOActivity extends AppCompatActivity {
             mWebView = (COWebView) findViewById(R.id.browser);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
                 mWebView.setOnApplyWindowInsetsListener((v, windowInsets) -> {
                     Insets insets = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.ime() | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ? WindowInsets.Type.systemOverlays() : 0));
 
-                    ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
-                    mlp.leftMargin = insets.left;
-                    mlp.topMargin = insets.top;
-                    mlp.rightMargin = insets.right;
-                    mlp.bottomMargin = insets.bottom;
-                    v.setLayoutParams(mlp);
+                    v.setPadding(insets.left, insets.top, insets.right, insets.bottom);
 
                     return WindowInsets.CONSUMED;
                 });
