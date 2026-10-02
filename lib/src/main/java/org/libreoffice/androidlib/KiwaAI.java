@@ -1,4 +1,4 @@
-package org.libreoffice.androidapp.ui;
+package org.libreoffice.androidlib;
 
 import org.json.JSONArray;
 import org.json.JSONObject;

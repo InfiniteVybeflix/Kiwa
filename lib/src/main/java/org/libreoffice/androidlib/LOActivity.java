@@ -97,7 +97,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.libreoffice.androidapp.ui.KiwaEditorAI;
+
 import org.libreoffice.androidlib.lok.LokClipboardData;
 import org.libreoffice.androidlib.lok.LokClipboardEntry;
 

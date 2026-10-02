@@ -1,5 +1,7 @@
 package org.libreoffice.androidapp.ui;
 
+import org.libreoffice.androidlib.KiwaAI;
+
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
