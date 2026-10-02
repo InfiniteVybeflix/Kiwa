@@ -585,6 +585,9 @@ var $ = function(s){return document.querySelector(s);};
 var $$ = function(s){return Array.prototype.slice.call(document.querySelectorAll(s));};
 var state = {
   view: 'home',
+  pendingAI: {},       // callId -> {resolve}
+  callSeq: 0,
+  aiHistory: [],
   filter: { home: 'all', recent: 'all' },
   files: [],
   selected: -1
@@ -798,6 +801,54 @@ function switchView(name){
 }
 
 /* ---- Native bridge calls (with fallback for browser preview) ---- */
+window.KiwaAIResponse = function(callId, jsonString){
+  var entry = state.pendingAI[callId];
+  if(!entry) return;
+  delete state.pendingAI[callId];
+  try { entry.resolve(JSON.parse(jsonString)); }
+  catch(e){ entry.resolve({ok:false, error:'Bad JSON from native'}); }
+};
+
+function aiRequest(payload, testMode){
+  return new Promise(function(resolve){
+    if(!hasNative()){
+      setTimeout(function(){
+        if(testMode) resolve({ok:true, text:'ready', provider:'preview', model:'preview'});
+        else resolve({ok:true, text:'Preview mode — no native bridge. In the app, this calls the real gateway.', provider:'preview'});
+      }, 500);
+      return;
+    }
+    var id = 'ai_' + (++state.callSeq) + '_' + Date.now();
+    state.pendingAI[id] = { resolve: resolve };
+    try {
+      if(testMode) KiwaNative.testAIConnection(id, JSON.stringify(payload));
+      else KiwaNative.sendAIMessage(id, JSON.stringify(payload));
+    } catch(e){
+      delete state.pendingAI[id];
+      resolve({ok:false, error:'Bridge error: ' + e.message});
+    }
+    // safety timeout
+    setTimeout(function(){
+      if(state.pendingAI[id]){
+        delete state.pendingAI[id];
+        resolve({ok:false, error:'Request timed out after 90s.'});
+      }
+    }, 95000);
+  });
+}
+
+function collectAISettings(){
+  var provEl = document.querySelector('.provider-card.active');
+  var provider = provEl ? provEl.dataset.provider : 'aevibron';
+  var keyEl = $('#apiKeyInput');
+  var apiKey = keyEl ? keyEl.value.trim() : '';
+  var baseEl = $('#baseUrlInput');
+  var baseUrl = baseEl ? baseEl.value.trim() : '';
+  var modelEl = $('#modelSelect');
+  var model = modelEl ? modelEl.value : 'core-v3';
+  return { provider: provider, apiKey: apiKey, baseUrl: baseUrl, model: model };
+}
+
 function hasNative(){
   return typeof KiwaNative !== 'undefined';
 }
@@ -849,28 +900,60 @@ function sendAI(){
   var text = (inp.value || '').trim();
   if(!text) return;
   var c = $('#aiChat');
+  var settings = collectAISettings();
+
+  // Append user message
   var u = document.createElement('div');
   u.className = 'msg user';
   u.innerHTML = '<div class="msg-av">You</div><div class="msg-b">' + escapeHtml(text) + '</div>';
   c.appendChild(u);
   inp.value = '';
   c.scrollTop = c.scrollHeight;
+
+  // Append thinking bubble
   var t = document.createElement('div');
   t.className = 'msg ai';
-  t.innerHTML = '<div class="msg-av">K</div><div class="msg-b">Thinking...</div>';
+  t.innerHTML = '<div class="msg-av">K</div><div class="msg-b"><span class="typing"><span></span><span></span><span></span></span></div>';
   c.appendChild(t);
   c.scrollTop = c.scrollHeight;
-  setTimeout(function(){
-    var reply = 'Got it. Processing: "' + escapeHtml(text) + '".<br><br>In the full app this will call the Aevibron gateway and stream a real response. For now, this is a preview of the interaction.';
-    if(hasNative()){
-      try {
-        var res = JSON.parse(KiwaNative.sendAIMessage(JSON.stringify({message: text})));
-        if(res && res.text) reply = res.text;
-      } catch(e){}
+
+  var history = (state.aiHistory || []).slice(-10);
+  history.push({ role: 'user', content: text });
+
+  var payload = {
+    provider: settings.provider,
+    apiKey: settings.apiKey,
+    baseUrl: settings.baseUrl,
+    model: settings.model,
+    messages: history,
+    systemPrompt: 'You are Kiwa AI, an assistant inside the Kiwa Studio office suite. Be concise, helpful, and clear. If the user asks for document edits, describe the change you would make.'
+  };
+
+  aiRequest(payload, false).then(function(r){
+    var bubble = t.querySelector('.msg-b');
+    if(r && r.ok && r.text){
+      bubble.innerHTML = formatAIText(r.text);
+      state.aiHistory = history.concat([{ role: 'assistant', content: r.text }]);
+    } else {
+      bubble.innerHTML = '<span style="color:var(--err)">' + escapeHtml((r && r.error) || 'Unknown error') + '</span>';
+      // remove the last user msg from history so retry is clean
+      state.aiHistory = history.slice(0, -1);
     }
-    t.querySelector('.msg-b').innerHTML = reply;
     c.scrollTop = c.scrollHeight;
-  }, 1200);
+  });
+}
+
+function formatAIText(s){
+  var esc = escapeHtml(s);
+  // inline code
+  esc = esc.replace(/`([^`\n]+)`/g, '<code style="background:var(--bg);padding:1px 5px;border-radius:4px;font-size:12px">$1</code>');
+  // bold
+  esc = esc.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  // bullets
+  esc = esc.replace(/(^|\n)[-*]\s+([^\n]+)/g, '$1\u2022 $2');
+  // newlines
+  esc = esc.replace(/\n/g, '<br>');
+  return esc;
 }
 
 /* ---- Modals / menus ---- */
@@ -991,27 +1074,27 @@ document.addEventListener('DOMContentLoaded', function(){
   var tcb = $('#testConnectionBtn');
   if(tcb) tcb.addEventListener('click', function(){
     var status = $('#testStatus');
-    var provider = document.querySelector('.provider-card.active');
-    var prov = provider ? provider.dataset.provider : 'aevibron';
-    var key = ($('#apiKeyInput') && $('#apiKeyInput').value || '').trim();
-    if(prov !== 'aevibron' && !key){
+    var prov = document.querySelector('.provider-card.active');
+    var provider = prov ? prov.dataset.provider : 'aevibron';
+    var settings = collectAISettings();
+    if(provider !== 'aevibron' && !settings.apiKey){
       status.textContent = 'Enter your API key first';
       status.className = 'conn-status err';
       return;
     }
     status.textContent = 'Testing...';
     status.className = 'conn-status busy';
-    setTimeout(function(){
-      if(hasNative()){
-        try {
-          var r = JSON.parse(KiwaNative.testAIConnection(JSON.stringify({provider: prov})));
-          if(r && r.ok){ status.textContent = '✓ Connected'; status.className = 'conn-status ok'; toast('Connection successful', '', 'success'); return; }
-        } catch(e){}
+    aiRequest(settings, true).then(function(r){
+      if(r && r.ok){
+        status.textContent = '✓ Connected · ' + (r.model || settings.model);
+        status.className = 'conn-status ok';
+        toast('Connection successful', 'Model: ' + (r.model || settings.model), 'success');
+      } else {
+        status.textContent = 'Failed: ' + ((r && r.error) || 'unknown');
+        status.className = 'conn-status err';
+        toast('Connection failed', (r && r.error) || 'Check your settings', 'error');
       }
-      status.textContent = '✓ Preview mode';
-      status.className = 'conn-status ok';
-      toast('Preview mode', 'Native bridge will run the real test', 'info');
-    }, 900);
+    });
   });
 
   // Request key — prefilled mailto

@@ -14,7 +14,13 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -29,6 +35,8 @@ public class KiwaNativeBridge {
         this.host = host;
         this.activity = host;
     }
+
+    // ==================== APP INFO ====================
 
     @JavascriptInterface
     public String getAppInfo() {
@@ -70,6 +78,8 @@ public class KiwaNativeBridge {
             }
         });
     }
+
+    // ==================== FILE SCANNING ====================
 
     @JavascriptInterface
     public String listFiles() {
@@ -113,9 +123,7 @@ public class KiwaNativeBridge {
                 o.put("star", false);
                 o.put("ai", false);
                 arr.put(o);
-            } catch (Exception e) {
-                // skip
-            }
+            } catch (Exception e) { /* skip */ }
         }
         return arr.toString();
     }
@@ -133,10 +141,7 @@ public class KiwaNativeBridge {
             } else {
                 String lower = f.getName().toLowerCase();
                 for (String e : exts) {
-                    if (lower.endsWith(e)) {
-                        out.add(f);
-                        break;
-                    }
+                    if (lower.endsWith(e)) { out.add(f); break; }
                 }
             }
         }
@@ -177,6 +182,8 @@ public class KiwaNativeBridge {
         return android.text.format.DateFormat.format("MMM d", millis).toString();
     }
 
+    // ==================== FILE ACTIONS ====================
+
     @JavascriptInterface
     public void openFile(String path) {
         host.runOnUiThread(() -> {
@@ -197,6 +204,13 @@ public class KiwaNativeBridge {
     }
 
     @JavascriptInterface
+    public void importFile() {
+        host.runOnUiThread(() -> host.importAndOpenFile());
+    }
+
+    // ==================== SETTINGS ====================
+
+    @JavascriptInterface
     public String loadSettings() {
         SharedPreferences sp = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         return sp.getString("json", "{}");
@@ -208,25 +222,12 @@ public class KiwaNativeBridge {
         sp.edit().putString("json", json).apply();
     }
 
-    @JavascriptInterface
-    public String testAIConnection(String json) {
-        return "{\"ok\":false,\"reason\":\"cycle-4\"}";
-    }
-
-    @JavascriptInterface
-    public String sendAIMessage(String json) {
-        return "{\"text\":\"Kiwa AI is coming in the next build.\"}";
-    }
-
-    @JavascriptInterface
-    public void importFile() {
-        host.runOnUiThread(() -> host.importAndOpenFile());
-    }
+    // ==================== SYSTEM ====================
 
     @JavascriptInterface
     public String getStorageInfo() {
         try {
-            java.io.File data = Environment.getDataDirectory();
+            File data = Environment.getDataDirectory();
             android.os.StatFs stat = new android.os.StatFs(data.getPath());
             long total = stat.getBlockCountLong() * stat.getBlockSizeLong();
             long free = stat.getAvailableBlocksLong() * stat.getBlockSizeLong();
@@ -256,5 +257,200 @@ public class KiwaNativeBridge {
                 Toast.makeText(activity, "Cannot open link", Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    // ==================== AI: NETWORK ====================
+
+    @JavascriptInterface
+    public void testAIConnection(final String callId, final String json) {
+        new Thread(() -> {
+            String result = doChatInternal(json, true);
+            host.deliverAIResponse(callId, result);
+        }).start();
+    }
+
+    @JavascriptInterface
+    public void sendAIMessage(final String callId, final String json) {
+        new Thread(() -> {
+            String result = doChatInternal(json, false);
+            host.deliverAIResponse(callId, result);
+        }).start();
+    }
+
+    /**
+     * Builds and sends an HTTP request. When testMode is true, we
+     * force a short "ping"-style prompt regardless of the caller payload.
+     * Returns a JSON string (never throws to the caller).
+     */
+    private String doChatInternal(String payloadJson, boolean testMode) {
+        HttpURLConnection conn = null;
+        try {
+            JSONObject payload = new JSONObject(payloadJson == null ? "{}" : payloadJson);
+            String provider = payload.optString("provider", "aevibron");
+            String baseUrl = payload.optString("baseUrl", "").trim();
+            String apiKey = payload.optString("apiKey", "").trim();
+            String model = payload.optString("model", "core-v3").trim();
+            String systemPrompt = payload.optString("systemPrompt", "").trim();
+            JSONArray messages = payload.optJSONArray("messages");
+
+            if (baseUrl.isEmpty()) {
+                return errorJson("No base URL configured. Open Settings and set a provider.");
+            }
+            // strip trailing slash
+            while (baseUrl.endsWith("/")) baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+
+            if (!provider.equals("aevibron") && apiKey.isEmpty()) {
+                return errorJson("No API key set for " + provider + ".");
+            }
+
+            // Build the outgoing request body
+            JSONObject body = new JSONObject();
+            body.put("model", model);
+
+            JSONArray outgoingMessages = new JSONArray();
+            if (provider.equals("anthropic")) {
+                // Anthropic wants system as a top-level field, messages = user/assistant only
+                if (!systemPrompt.isEmpty()) body.put("system", systemPrompt);
+                JSONArray userMsgs = new JSONArray();
+                if (testMode) {
+                    JSONObject m = new JSONObject();
+                    m.put("role", "user");
+                    m.put("content", "Reply with the single word: ready");
+                    userMsgs.put(m);
+                } else if (messages != null) {
+                    for (int i = 0; i < messages.length(); i++) {
+                        JSONObject m = messages.getJSONObject(i);
+                        String role = m.optString("role", "user");
+                        if (!role.equals("system")) userMsgs.put(m);
+                    }
+                }
+                body.put("messages", userMsgs);
+                body.put("max_tokens", 2048);
+            } else {
+                // OpenAI-compatible: system goes into the messages array
+                if (!systemPrompt.isEmpty()) {
+                    JSONObject sys = new JSONObject();
+                    sys.put("role", "system");
+                    sys.put("content", systemPrompt);
+                    outgoingMessages.put(sys);
+                }
+                if (testMode) {
+                    JSONObject m = new JSONObject();
+                    m.put("role", "user");
+                    m.put("content", "Reply with the single word: ready");
+                    outgoingMessages.put(m);
+                } else if (messages != null) {
+                    for (int i = 0; i < messages.length(); i++) {
+                        outgoingMessages.put(messages.get(i));
+                    }
+                }
+                body.put("messages", outgoingMessages);
+                body.put("stream", false);
+            }
+
+            String endpoint = provider.equals("anthropic") ? "/messages" : "/chat/completions";
+            URL url = new URL(baseUrl + endpoint);
+
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setConnectTimeout(20000);
+            conn.setReadTimeout(90000);
+            conn.setDoOutput(true);
+
+            // Auth header per provider
+            if (provider.equals("aevibron")) {
+                conn.setRequestProperty("X-Aevibron-Key", apiKey);
+            } else if (provider.equals("anthropic")) {
+                conn.setRequestProperty("x-api-key", apiKey);
+                conn.setRequestProperty("anthropic-version", "2023-06-01");
+            } else {
+                conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+            }
+
+            // Send body
+            byte[] bodyBytes = body.toString().getBytes("UTF-8");
+            conn.setFixedLengthStreamingMode(bodyBytes.length);
+            OutputStream os = conn.getOutputStream();
+            os.write(bodyBytes);
+            os.flush();
+            os.close();
+
+            int code = conn.getResponseCode();
+            InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+            String raw = readStream(is);
+
+            if (code < 200 || code >= 300) {
+                return errorJson("HTTP " + code + ": " + truncate(raw, 400));
+            }
+
+            // Parse the response
+            JSONObject resp = new JSONObject(raw);
+            String text = "";
+
+            if (provider.equals("anthropic")) {
+                JSONArray content = resp.optJSONArray("content");
+                if (content != null && content.length() > 0) {
+                    text = content.getJSONObject(0).optString("text", "");
+                }
+            } else {
+                JSONArray choices = resp.optJSONArray("choices");
+                if (choices != null && choices.length() > 0) {
+                    JSONObject first = choices.getJSONObject(0);
+                    JSONObject msg = first.optJSONObject("message");
+                    if (msg != null) text = msg.optString("content", "");
+                    if (text.isEmpty()) text = first.optString("text", "");
+                }
+            }
+
+            if (text.isEmpty()) {
+                return errorJson("Empty response from " + provider + ". Raw: " + truncate(raw, 200));
+            }
+
+            JSONObject out = new JSONObject();
+            out.put("ok", true);
+            out.put("text", text);
+            out.put("provider", provider);
+            out.put("model", model);
+            return out.toString();
+
+        } catch (java.net.SocketTimeoutException e) {
+            return errorJson("Request timed out. Check your connection.");
+        } catch (java.net.UnknownHostException e) {
+            return errorJson("No internet connection.");
+        } catch (Exception e) {
+            return errorJson(e.getClass().getSimpleName() + ": " + (e.getMessage() == null ? "unknown" : e.getMessage()));
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    private static String readStream(InputStream is) {
+        if (is == null) return "";
+        StringBuilder sb = new StringBuilder();
+        try {
+            BufferedReader r = new BufferedReader(new InputStreamReader(is, "UTF-8"));
+            String line;
+            while ((line = r.readLine()) != null) sb.append(line);
+            r.close();
+        } catch (Exception e) { /* ignore */ }
+        return sb.toString();
+    }
+
+    private static String truncate(String s, int n) {
+        if (s == null) return "";
+        return s.length() <= n ? s : s.substring(0, n) + "...";
+    }
+
+    private static String errorJson(String message) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("ok", false);
+            o.put("error", message == null ? "Unknown error" : message);
+            return o.toString();
+        } catch (Exception e) {
+            return "{\"ok\":false,\"error\":\"Unknown\"}";
+        }
     }
 }

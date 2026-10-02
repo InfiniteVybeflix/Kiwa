@@ -216,6 +216,21 @@ public class KiwaHomeActivity extends AppCompatActivity {
         }
     }
 
+    /** Called from a background thread by the bridge. Posts JS back to the WebView. */
+    public void deliverAIResponse(final String callId, final String json) {
+        if (webView == null) return;
+        final String safeCallId = org.json.JSONObject.quote(callId);
+        final String safeJson = org.json.JSONObject.quote(json == null ? "{}" : json);
+        webView.post(() -> {
+            if (webView == null) return;
+            String js = "try{ if(window.KiwaAIResponse) window.KiwaAIResponse("
+                    + safeCallId + ", " + safeJson + "); }catch(e){}";
+            try {
+                webView.evaluateJavascript(js, null);
+            } catch (Exception ignored) {}
+        });
+    }
+
     @Override
     public void onBackPressed() {
         if (webView != null && webView.canGoBack()) {
