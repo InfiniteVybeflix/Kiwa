@@ -545,8 +545,8 @@
           <button class="btn btn-primary" id="requestKeyBtn">Request key</button>
         </div>
       </div>
-      <div class="setting" id="apiKeyPanel" style="display:none">
-        <label>API key</label>
+      <div class="setting" id="apiKeyPanel">
+        <label id="apiKeyLabel">API key</label>
         <div class="input-group">
           <input type="password" class="settings-input" id="apiKeyInput" placeholder="sk-...">
           <button class="input-icon" id="toggleKeyVisibility"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -973,7 +973,9 @@ document.addEventListener('DOMContentLoaded', function(){
       var p = card.dataset.provider;
       $$('.provider-card').forEach(function(x){ x.classList.toggle('active', x === card); });
       var rkp = $('#requestKeyPanel'); if(rkp) rkp.style.display = (p === 'aevibron') ? '' : 'none';
-      var akp = $('#apiKeyPanel'); if(akp) akp.style.display = (p === 'aevibron') ? 'none' : '';
+      var akp = $('#apiKeyPanel'); if(akp) akp.style.display = '';
+      var akLabel = $('#apiKeyLabel');
+      if(akLabel){ akLabel.textContent = (p === 'aevibron') ? 'API key (optional \u2014 or request one above)' : 'API key'; }
       var urls = { aevibron:'https://aevibron-gateway.vercel.app/api/v1', openai:'https://api.openai.com/v1', anthropic:'https://api.anthropic.com/v1', custom:'' };
       var bu = $('#baseUrlInput'); if(bu) bu.value = urls[p] || '';
       var ak = $('#apiKeyInput');
