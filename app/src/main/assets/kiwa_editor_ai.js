@@ -136,46 +136,7 @@
     } catch(e) { return ''; }
   }
 
-  function sendAI(prompt) {
-    var settings = window.KiwaEditorSettings || {};
-    var id = 'ed_' + (++seq) + '_' + Date.now();
-
-    var systemPrompt = 'You are Kiwa AI, an assistant inside a document editor. Keep replies concise. When the user asks for content to insert, output ONLY that content without preamble or commentary.';
-
-    var selection = getSelectionText();
-    if (selection && selection.length > 0) {
-      systemPrompt += '\n\nSelected text from the document:\n"""\n' + selection + '\n"""';
-    }
-
-    var msgs = history.slice(-8);
-    msgs.push({role: 'user', content: prompt});
-
-    var payload = {
-      provider: settings.provider || 'aevibron',
-      apiKey: settings.apiKey || '',
-      baseUrl: settings.baseUrl || 'https://aevibron-gateway.vercel.app/api/v1',
-      model: settings.model || 'core-v3',
-      messages: msgs,
-      systemPrompt: systemPrompt
-    };
-
-    return new Promise(function(resolve) {
-      if (!window.KiwaEditorAI || !window.KiwaEditorAI.askAI) {
-        resolve({ok: false, error: 'AI bridge not available'});
-        return;
-      }
-      pending[id] = { resolve: resolve };
-      try {
-        window.KiwaEditorAI.askAI(id, JSON.stringify(payload));
-      } catch(e) {
-        delete pending[id];
-        resolve({ok: false, error: e.message});
-      }
-      setTimeout(function() {
-        if (pending[id]) { delete pending[id]; resolve({ok: false, error: 'timeout'}); }
-      }, 95000);
-    });
-  }
+  // sendAI replaced by sendAIWithContext
 
   function escapeUnoString(s) {
     return String(s)
@@ -222,6 +183,10 @@
   }
 
   function handleSend() {
+    sendAIWithContext();
+  }
+
+  function handleSendOld() {
     var text = input.value.trim();
     if (!text) return;
     input.value = '';
@@ -440,6 +405,250 @@
     } catch(e){
       return '<pre style="font-size:10px;max-height:200px;overflow:auto">' + escapeHtml(json.substring(0, 2000)) + '</pre>';
     }
+  }
+
+  // ============ AI-DRIVEN EDITING (4C.2 + 4C.3) ============
+  var structureCache = { data: null, ts: 0 };
+
+  function getStructure(maxAgeMs){
+    maxAgeMs = maxAgeMs || 30000;
+    var now = Date.now();
+    if (structureCache.data && (now - structureCache.ts) < maxAgeMs) {
+      return Promise.resolve(structureCache.data);
+    }
+    return extractStructure().then(function(json){
+      if (json) {
+        structureCache.data = json;
+        structureCache.ts = now;
+      }
+      return json;
+    });
+  }
+
+  function invalidateStructure(){
+    structureCache.data = null;
+    structureCache.ts = 0;
+  }
+
+  var EDIT_SYSTEM_PROMPT = [
+    'You are Kiwa AI, editing a document in a mobile office suite.',
+    '',
+    'You will receive the current document structure as JSON, then the user\'s request.',
+    '',
+    'If the user is asking a question or chatting, respond with plain text.',
+    '',
+    'If the user wants to CHANGE the document, respond with ONLY a JSON object:',
+    '{"Transforms": {"<selector>": {"<property>": "<value>"}}}',
+    '',
+    'Selectors (from the structure you receive):',
+    '- ContentControls.ByIndex.<n>',
+    '- ContentControls.ByTag.<tag>',
+    '- ContentControls.ByAlias.<alias>',
+    '- Headings.ByIndex.<n>',
+    '- Headings.ByTitle.<title>',
+    '',
+    'Common properties: content, alias, text, tag.',
+    '',
+    'Examples:',
+    'User: "add a name at number 5"',
+    'You: {"Transforms": {"ContentControls.ByTag.5": {"content": "John Doe"}}}',
+    '',
+    'User: "change the title to Introduction"',
+    'You: {"Transforms": {"Headings.ByIndex.0": {"text": "Introduction"}}}',
+    '',
+    'User: "what is in this document?"',
+    'You: "The document contains 3 headings and a form with 10 fields..."',
+    '',
+    'If the user\'s request cannot be matched to a real item, respond:',
+    '{"error": "I could not find X. Available items are: ..."}',
+    '',
+    'Output ONLY the JSON object when it is a transform. No markdown, no commentary.'
+  ].join('\n');
+
+  function detectTransform(text){
+    if (!text) return null;
+    var trimmed = String(text).trim();
+    // strip markdown fences if the AI added them
+    trimmed = trimmed.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    if (trimmed.charAt(0) !== '{') return null;
+    try {
+      var obj = JSON.parse(trimmed);
+      if (obj && obj.Transforms) return obj;
+      if (obj && obj.error) return { __error: obj.error };
+    } catch(e) {}
+    return null;
+  }
+
+  function summarizeTransform(t){
+    if (t && t.__error) return '<div style="color:#F59E0B">' + escapeHtml(t.__error) + '</div>';
+    if (!t || !t.Transforms) return '<div>No changes described.</div>';
+    var lines = [];
+    var keys = Object.keys(t.Transforms);
+    for (var i = 0; i < keys.length; i++){
+      var sel = keys[i];
+      var ops = t.Transforms[sel];
+      var props = Object.keys(ops);
+      var summary = props.map(function(p){ return p + ' = "' + ops[p] + '"'; }).join(', ');
+      lines.push('<div style="padding:3px 0"><strong style="color:#FFB800">' + escapeHtml(sel) + '</strong><br><span style="font-size:12px">' + escapeHtml(summary) + '</span></div>');
+    }
+    return lines.join('');
+  }
+
+  function renderTransformPreview(msgEl, transform){
+    var raw = JSON.stringify(transform, null, 2);
+    var html = '' +
+      '<div class="kp-preview-title" style="font-weight:600;margin-bottom:8px">\uD83C\uDFAF Proposed edit</div>' +
+      '<div class="kp-preview-body" style="margin-bottom:10px">' + summarizeTransform(transform) + '</div>' +
+      '<div class="kp-actions">' +
+        '<button class="kp-action" data-preview="raw">Show JSON</button>' +
+        '<button class="kp-action primary" data-preview="apply">Apply</button>' +
+        '<button class="kp-action" data-preview="cancel">Cancel</button>' +
+      '</div>' +
+      '<pre data-preview="json" style="display:none;font-size:10px;background:#0A0A0C;padding:8px;border-radius:6px;margin-top:8px;max-height:180px;overflow:auto">' +
+        escapeHtml(raw) +
+      '</pre>';
+    var bubble = msgEl.querySelector('.kp-msg-b');
+    bubble.innerHTML = html;
+
+    var rawBtn = msgEl.querySelector('[data-preview="raw"]');
+    var applyBtn = msgEl.querySelector('[data-preview="apply"]');
+    var cancelBtn = msgEl.querySelector('[data-preview="cancel"]');
+    var pre = msgEl.querySelector('[data-preview="json"]');
+
+    if (rawBtn) rawBtn.addEventListener('click', function(){
+      pre.style.display = (pre.style.display === 'none') ? 'block' : 'none';
+    });
+    if (cancelBtn) cancelBtn.addEventListener('click', function(){
+      bubble.innerHTML = '<span style="color:#6B6B76">Cancelled.</span>';
+    });
+    if (applyBtn) applyBtn.addEventListener('click', function(){
+      applyBtn.disabled = true;
+      applyBtn.textContent = 'Applying...';
+      applyTransform(transform).then(function(result){
+        if (result.ok) {
+          bubble.innerHTML = '<div style="color:#10B981;font-weight:600">\u2713 Applied</div><div style="font-size:12px;color:#A8A8B3;margin-top:4px">' + escapeHtml(result.note || '') + '</div>';
+        } else {
+          bubble.innerHTML = '<div style="color:#EF4444;font-weight:600">Apply failed</div><div style="font-size:12px;margin-top:4px">' + escapeHtml(result.error || 'Unknown error') + '</div>';
+        }
+      });
+    });
+  }
+
+  function applyTransform(transform){
+    return new Promise(function(resolve){
+      var sent = false;
+      try {
+        if (window.app && window.app.socket && window.app.socket.sendMessage) {
+          var encoded = encodeURIComponent(JSON.stringify(transform));
+          window.app.socket.sendMessage('transformdocumentstructure url=interactive transform=' + encoded);
+          sent = true;
+        }
+      } catch(e){
+        resolve({ok: false, error: 'Send failed: ' + e.message});
+        return;
+      }
+      if (!sent) {
+        resolve({ok: false, error: 'Socket unavailable'});
+        return;
+      }
+      // invalidate cache so re-verification gets fresh data
+      invalidateStructure();
+      // Give the server time to apply, then re-extract
+      setTimeout(function(){
+        extractStructure().then(function(newStruct){
+          if (!newStruct) {
+            resolve({ok: true, note: 'Applied. Re-extraction unavailable — check the document.'});
+            return;
+          }
+          structureCache.data = newStruct;
+          structureCache.ts = Date.now();
+          // Naive check: does any value from the transform appear in the new structure?
+          var expected = [];
+          var keys = Object.keys(transform.Transforms || {});
+          for (var i = 0; i < keys.length; i++){
+            var ops = transform.Transforms[keys[i]];
+            var props = Object.keys(ops);
+            for (var j = 0; j < props.length; j++){
+              var v = ops[props[j]];
+              if (typeof v === 'string' && v.length > 1) expected.push(v);
+            }
+          }
+          var found = expected.some(function(v){ return newStruct.indexOf(v) >= 0; });
+          if (found) {
+            resolve({ok: true, note: 'Verified — the change is in the document.'});
+          } else {
+            resolve({ok: true, note: 'Applied, but verification was inconclusive. Check the document.'});
+          }
+        });
+      }, 1200);
+    });
+  }
+
+  // Override sendAI: fetch structure, use edit-mode prompt, parse response
+  var _origSendAI = null;
+  function sendAIWithContext(){
+    var inp = document.getElementById('kpInput');
+    var text = (inp.value || '').trim();
+    if (!text) return;
+
+    var u = addMessage('user', escapeHtml(text));
+    inp.value = '';
+    inp.style.height = 'auto';
+    history.push({role: 'user', content: text});
+    var thinking = addMessage('ai', '<span class="kp-typing"><span></span><span></span><span></span></span>');
+
+    var settings = window.KiwaEditorSettings || {};
+
+    var chain = getStructure(30000);
+
+    chain.then(function(structureJson){
+      var systemPrompt = EDIT_SYSTEM_PROMPT;
+      if (structureJson) {
+        var trimmed = structureJson.length > 18000 ? structureJson.substring(0, 18000) + '...[truncated]' : structureJson;
+        systemPrompt += '\n\nCurrent document structure:\n' + trimmed;
+      }
+      var msgs = history.slice(-6);
+      var payload = {
+        provider: settings.provider || 'aevibron',
+        apiKey: settings.apiKey || '',
+        baseUrl: settings.baseUrl || 'https://aevibron-gateway.vercel.app/api/v1',
+        model: settings.model || 'core-v3',
+        messages: msgs,
+        systemPrompt: systemPrompt
+      };
+
+      var id = 'ed_' + (++seq) + '_' + Date.now();
+      var promise = new Promise(function(resolve){
+        if (!window.KiwaEditorAI || !window.KiwaEditorAI.askAI) { resolve({ok: false, error: 'AI bridge unavailable'}); return; }
+        pending[id] = { resolve: resolve };
+        try { window.KiwaEditorAI.askAI(id, JSON.stringify(payload)); }
+        catch(e){ delete pending[id]; resolve({ok: false, error: e.message}); }
+        setTimeout(function(){ if (pending[id]) { delete pending[id]; resolve({ok: false, error: 'timeout'}); } }, 95000);
+      });
+      return promise;
+    }).then(function(r){
+      var bubble = thinking.querySelector('.kp-msg-b');
+      if (!r || !r.ok || !r.text) {
+        bubble.innerHTML = '<span style="color:#EF4444">' + escapeHtml((r && r.error) || 'Unknown error') + '</span>';
+        history.pop();
+        chat.scrollTop = chat.scrollHeight;
+        return;
+      }
+      var transform = detectTransform(r.text);
+      if (transform) {
+        if (transform.__error) {
+          bubble.innerHTML = '<div style="color:#F59E0B">' + escapeHtml(transform.__error) + '</div>';
+          history.push({role: 'assistant', content: r.text});
+        } else {
+          renderTransformPreview(thinking, transform);
+          history.push({role: 'assistant', content: r.text});
+        }
+      } else {
+        bubble.innerHTML = formatText(r.text);
+        history.push({role: 'assistant', content: r.text});
+      }
+      chat.scrollTop = chat.scrollHeight;
+    });
   }
 
   console.log('Kiwa AI editor panel installed (with structure extraction)');
