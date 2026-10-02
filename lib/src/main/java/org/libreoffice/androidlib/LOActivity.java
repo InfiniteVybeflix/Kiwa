@@ -97,6 +97,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.libreoffice.androidapp.ui.KiwaEditorAI;
 import org.libreoffice.androidlib.lok.LokClipboardData;
 import org.libreoffice.androidlib.lok.LokClipboardEntry;
 
@@ -542,6 +543,7 @@ public class LOActivity extends AppCompatActivity {
             WebSettings webSettings = mWebView.getSettings();
             webSettings.setJavaScriptEnabled(true);
             mWebView.addJavascriptInterface(this, "COOLMessageHandler");
+            mWebView.addJavascriptInterface(new KiwaEditorAI(getApplicationContext(), mWebView), "KiwaEditorAI");
 
             webSettings.setDomStorageEnabled(true);
 
@@ -1014,6 +1016,27 @@ public class LOActivity extends AppCompatActivity {
         Log.d(TAG, "onPause() - hinting to save, we might need to return to the doc");
     }
 
+    /** Injects the Kiwa AI panel into the Collabora editor WebView. */
+    private void injectKiwaAIPanel() {
+        if (mWebView == null) return;
+        try {
+            java.io.InputStream is = getAssets().open("kiwa_editor_ai.js");
+            byte[] buf = new byte[is.available()];
+            int read = 0;
+            while (read < buf.length) {
+                int r = is.read(buf, read, buf.length - read);
+                if (r < 0) break;
+                read += r;
+            }
+            is.close();
+            String js = new String(buf, 0, read, "UTF-8");
+            mWebView.evaluateJavascript("(function(){" + js + "\n})();", null);
+            Log.i(TAG, "Kiwa AI panel injected");
+        } catch (Exception e) {
+            Log.e(TAG, "injectKiwaAIPanel failed: " + e.getMessage());
+        }
+    }
+
     @Override
     protected void onDestroy() {
         stopWatchingForHardwareKeyboard();
@@ -1453,6 +1476,7 @@ public class LOActivity extends AppCompatActivity {
                     mProgressDialog.dismiss();
                     if (BuildConfig.GOOGLE_PLAY_ENABLED && rateAppController != null)
                         rateAppController.askUserForRating();
+                    injectKiwaAIPanel();
                     return;
                 }
 
