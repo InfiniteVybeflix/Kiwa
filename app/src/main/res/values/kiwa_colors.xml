@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="kiwa_bg">#0A0A0C</color>
     <color name="kiwa_golden">#FFC107</color>
     <color name="kiwa_golden_dark">#FFA000</color>
     <color name="kiwa_teal">#00897B</color>
