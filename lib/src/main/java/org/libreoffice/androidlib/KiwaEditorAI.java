@@ -31,6 +31,39 @@ public class KiwaEditorAI {
         return sp.getString("json", "{}");
     }
 
+    /** Called from the editor panel JS when an extraction response arrives. */
+    @JavascriptInterface
+    public void onStructure(final String json) {
+        deliverJS("window.KiwaOnStructure", json);
+    }
+
+    /** Called from the editor panel JS with any incoming message for debug. */
+    @JavascriptInterface
+    public void onRawMessage(final String text) {
+        deliverJS("window.KiwaOnRawMessage", text);
+    }
+
+    /** Called from the editor panel JS when the extraction request fails. */
+    @JavascriptInterface
+    public void onError(final String message) {
+        deliverJS("window.KiwaOnError", message);
+    }
+
+    private void deliverJS(final String func, final String payload) {
+        if (webView == null) return;
+        final String quotedFunc;
+        final String quotedPayload;
+        try {
+            quotedFunc = JSONObject.quote(func);
+            quotedPayload = JSONObject.quote(payload == null ? "" : payload);
+        } catch (Exception e) { return; }
+        webView.post(() -> {
+            if (webView == null) return;
+            String js = "try{ (typeof " + func + " === 'function') " + func + "(" + quotedPayload + "); }catch(e){}";
+            try { webView.evaluateJavascript(js, null); } catch (Exception ignored) {}
+        });
+    }
+
     private void deliver(final String callId, final String json) {
         if (webView == null) return;
         final String safeId;

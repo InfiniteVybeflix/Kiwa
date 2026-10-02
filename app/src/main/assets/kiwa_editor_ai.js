@@ -80,6 +80,7 @@
   var panel = document.createElement('div');
   panel.id = 'kiwa-panel';
   var chips = [
+    ['__READ_DOC__', '📖 Read document'],
     ['Summarize the selected text', 'Summarize'],
     ['Rewrite the selected text more professionally', 'Rewrite'],
     ['Fix grammar and spelling in the selection', 'Fix grammar'],
@@ -288,7 +289,12 @@
   for (var k = 0; k < chipEls.length; k++) {
     (function(el) {
       el.addEventListener('click', function() {
-        input.value = el.dataset.chip;
+        var c = el.dataset.chip;
+        if (c === '__READ_DOC__') {
+          readDocumentAndDisplay();
+          return;
+        }
+        input.value = c;
         input.focus();
       });
     })(chipEls[k]);
@@ -301,5 +307,141 @@
     }
   } catch(e) {}
 
-  console.log('Kiwa AI editor panel installed');
+  // ============ DOCUMENT STRUCTURE EXTRACTION (4C.1) ============
+  var rawLog = [];
+  var extractionResolvers = [];
+
+  window.KiwaOnStructure = function(jsonString){
+    var pending = extractionResolvers.splice(0);
+    for (var i = 0; i < pending.length; i++) pending[i](jsonString);
+  };
+
+  window.KiwaOnRawMessage = function(text){
+    rawLog.push({t: Date.now(), s: text});
+    if (rawLog.length > 200) rawLog.shift();
+  };
+
+  window.KiwaOnError = function(msg){
+    var pending = extractionResolvers.splice(0);
+    for (var i = 0; i < pending.length; i++) pending[i](null);
+  };
+
+  function installSocketWatcher(){
+    var s = window.socket;
+    if (!s && window.app && window.app.socket && window.app.socket.socket) {
+      s = window.app.socket.socket;
+    }
+    if (!s) {
+      setTimeout(installSocketWatcher, 500);
+      return;
+    }
+    if (s.__kiwaWrapped) return;
+    s.__kiwaWrapped = true;
+
+    var orig = s.onmessage;
+    s.onmessage = function(evt){
+      try {
+        if (evt && typeof evt.data === 'string') {
+          var d = evt.data;
+          var prefixes = [
+            'extractdocumentstructure:',
+            'extractdocumentstructure ',
+            'extracteddocumentstructure:',
+            'documentstructure:',
+            'commandresult: extractdocumentstructure',
+            'commandresult:extractdocumentstructure'
+          ];
+          var matched = false;
+          for (var i = 0; i < prefixes.length; i++) {
+            if (d.indexOf(prefixes[i]) === 0) {
+              var payload = d.substring(prefixes[i].length).trim();
+              matched = true;
+              if (window.KiwaOnStructure) window.KiwaOnStructure(payload);
+              break;
+            }
+          }
+          if (!matched && d.length > 20 && d.indexOf('"Structure"') >= 0) {
+            matched = true;
+            if (window.KiwaOnStructure) window.KiwaOnStructure(d);
+          }
+          if (!matched && d.length > 40) {
+            if (window.KiwaEditorAI && window.KiwaEditorAI.onRawMessage) {
+              try { window.KiwaEditorAI.onRawMessage(d.substring(0, 400)); } catch(e){}
+            }
+          }
+        }
+      } catch(e) {}
+      if (orig) return orig.call(this, evt);
+    };
+  }
+  installSocketWatcher();
+
+  function extractStructure(){
+    return new Promise(function(resolve){
+      var sent = false;
+      try {
+        if (window.app && window.app.socket && window.app.socket.sendMessage) {
+          window.app.socket.sendMessage('extractdocumentstructure url=interactive filter=all');
+          sent = true;
+        }
+      } catch(e) {}
+      if (!sent) { resolve(null); return; }
+      extractionResolvers.push(resolve);
+      setTimeout(function(){
+        var idx = extractionResolvers.indexOf(resolve);
+        if (idx >= 0) {
+          extractionResolvers.splice(idx, 1);
+          resolve(null);
+        }
+      }, 15000);
+    });
+  }
+
+  function readDocumentAndDisplay(){
+    var bubble = addMessage('ai', 'Reading document structure...');
+    var bubbleBody = bubble.querySelector('.kp-msg-b');
+    extractStructure().then(function(json){
+      if (!json) {
+        bubbleBody.innerHTML = '<span style="color:#F59E0B">Could not read document. Check console for raw messages.</span>';
+        return;
+      }
+      bubbleBody.innerHTML = summarizeStructure(json);
+    });
+  }
+
+  function summarizeStructure(json){
+    try {
+      var obj = JSON.parse(json);
+      var lines = [];
+      function walk(node, depth){
+        if (!node || depth > 3) return;
+        if (typeof node === 'string') return;
+        if (Array.isArray(node)){
+          for (var i = 0; i < node.length && i < 20; i++) walk(node[i], depth);
+          return;
+        }
+        if (typeof node === 'object'){
+          var keys = Object.keys(node);
+          for (var j = 0; j < keys.length; j++){
+            var k = keys[j];
+            var v = node[k];
+            if (typeof v === 'string' && v.length < 200 && depth <= 2){
+              lines.push('<div style="font-size:12px;padding:2px 0"><strong>' + k + ':</strong> ' + escapeHtml(v) + '</div>');
+            } else if (typeof v === 'object'){
+              lines.push('<div style="font-size:12px;padding:4px 0 2px"><strong style="color:#FFB800">' + k + '</strong></div>');
+              walk(v, depth + 1);
+            }
+          }
+        }
+      }
+      walk(obj, 0);
+      if (!lines.length) return '<pre style="font-size:10px;max-height:200px;overflow:auto">' + escapeHtml(json.substring(0, 2000)) + '</pre>';
+      return lines.slice(0, 40).join('');
+    } catch(e){
+      return '<pre style="font-size:10px;max-height:200px;overflow:auto">' + escapeHtml(json.substring(0, 2000)) + '</pre>';
+    }
+  }
+
+  console.log('Kiwa AI editor panel installed (with structure extraction)');
+
 })();
