@@ -19,6 +19,8 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 public class KiwaHomeActivity extends AppCompatActivity {
+    private static final int REQ_CREATE = 2001;
+    private static final int REQ_IMPORT = 2002;
     private WebView webView;
 
     @Override
@@ -27,10 +29,6 @@ public class KiwaHomeActivity extends AppCompatActivity {
 
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
-        // FrameLayout wraps the WebView so we can apply system-bar insets
-        // as padding on the parent. Padding on the WebView itself does NOT
-        // shrink its internal CSS viewport, which is why sticky elements
-        // (topbar) ignored the inset. Padding on a parent ViewGroup does.
         FrameLayout container = new FrameLayout(this);
         container.setBackgroundColor(0xFF0A0A0C);
         container.setFitsSystemWindows(false);
@@ -118,6 +116,104 @@ public class KiwaHomeActivity extends AppCompatActivity {
 
         webView.addJavascriptInterface(new KiwaNativeBridge(this), "KiwaNative");
         webView.loadUrl("file:///android_asset/kiwa_studio_v2.html");
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (webView != null) {
+            webView.post(() -> {
+                try {
+                    webView.evaluateJavascript(
+                            "try{ if(window.KiwaReload) window.KiwaReload(); }catch(e){}",
+                            null);
+                } catch (Exception ignored) {}
+            });
+        }
+    }
+
+    public void createAndOpenFile(String type) {
+        String mime;
+        String name;
+        switch (type == null ? "" : type) {
+            case "sheet":
+                mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                name = "Untitled Spreadsheet.xlsx";
+                break;
+            case "slide":
+                mime = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+                name = "Untitled Presentation.pptx";
+                break;
+            default:
+                mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+                name = "Untitled Document.docx";
+                break;
+        }
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(mime);
+        intent.putExtra(Intent.EXTRA_TITLE, name);
+        try {
+            startActivityForResult(intent, REQ_CREATE);
+        } catch (Exception e) {
+            Toast.makeText(this, "Cannot create: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    public void importAndOpenFile() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        String[] mimes = new String[] {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                "application/msword",
+                "application/vnd.ms-excel",
+                "application/vnd.ms-powerpoint",
+                "application/vnd.oasis.opendocument.text",
+                "application/vnd.oasis.opendocument.spreadsheet",
+                "application/vnd.oasis.opendocument.presentation",
+                "application/pdf",
+                "text/plain",
+                "text/csv",
+                "text/rtf"
+        };
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, mimes);
+        try {
+            startActivityForResult(intent, REQ_IMPORT);
+        } catch (Exception e) {
+            Toast.makeText(this, "Cannot open file picker: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != RESULT_OK || data == null) return;
+        Uri uri = data.getData();
+        if (uri == null) return;
+
+        if (requestCode == REQ_CREATE) {
+            Intent open = new Intent(this, org.libreoffice.androidlib.LOActivity.class);
+            open.setAction(Intent.ACTION_EDIT);
+            open.setData(uri);
+            try {
+                startActivity(open);
+            } catch (Exception e) {
+                Toast.makeText(this, "Cannot open: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        } else if (requestCode == REQ_IMPORT) {
+            Intent open = new Intent(this, org.libreoffice.androidlib.LOActivity.class);
+            open.setAction(Intent.ACTION_VIEW);
+            open.setData(uri);
+            open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            try {
+                startActivity(open);
+            } catch (Exception e) {
+                Toast.makeText(this, "Cannot open: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        }
     }
 
     @Override
