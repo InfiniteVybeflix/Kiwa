@@ -360,7 +360,7 @@ public class LOActivity extends AppCompatActivity {
         final View insetContainer = findViewById(R.id.webview_container);
         if (insetContainer != null) {
             ViewCompat.setOnApplyWindowInsetsListener(insetContainer, (v, windowInsets) -> {
-                Insets insets = windowInsets.getInsets(
+                androidx.core.graphics.Insets insets = windowInsets.getInsets(
                         WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
                 v.setPadding(insets.left, insets.top, insets.right, insets.bottom);
                 return WindowInsetsCompat.CONSUMED;
