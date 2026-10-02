@@ -26,3 +26,4 @@ lib/src/main/cpp/lib/arm64-v8a/liblo-native-code.so
 *.keystore
 *.jks
 keystore.properties
+branding/

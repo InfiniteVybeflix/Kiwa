@@ -92,6 +92,8 @@ import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.WindowCompat;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -349,6 +351,22 @@ public class LOActivity extends AppCompatActivity {
         sPrefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
 
         setContentView(R.layout.lolib_activity_main);
+
+        // Kiwa: apply system-bar insets to the WebView container so the editor
+        // chrome (top toolbar, bottom slide strip) never overlaps the status
+        // bar or the navigation bar. Applied here rather than in initUI so it
+        // runs for every entry path (content:// and file://).
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        final View insetContainer = findViewById(R.id.webview_container);
+        if (insetContainer != null) {
+            ViewCompat.setOnApplyWindowInsetsListener(insetContainer, (v, windowInsets) -> {
+                Insets insets = windowInsets.getInsets(
+                        WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+                v.setPadding(insets.left, insets.top, insets.right, insets.bottom);
+                return WindowInsetsCompat.CONSUMED;
+            });
+        }
+
         mProgressDialog = new ProgressDialog(this);
         if (BuildConfig.GOOGLE_PLAY_ENABLED)
             this.rateAppController = new RateAppController(this);
@@ -514,15 +532,6 @@ public class LOActivity extends AppCompatActivity {
             mWebView = (COWebView) findViewById(R.id.browser);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-                mWebView.setOnApplyWindowInsetsListener((v, windowInsets) -> {
-                    Insets insets = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.ime() | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ? WindowInsets.Type.systemOverlays() : 0));
-
-                    v.setPadding(insets.left, insets.top, insets.right, insets.bottom);
-
-                    return WindowInsets.CONSUMED;
-                });
-
                 boolean lightMode = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_YES) == 0;
                 WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView()).setAppearanceLightStatusBars(lightMode);
                 WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView()).setAppearanceLightNavigationBars(lightMode);
