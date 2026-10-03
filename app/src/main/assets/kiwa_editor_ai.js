@@ -3,7 +3,7 @@
   window.__kiwaAIInstalled = true;
 
   var STYLE = [
-    '#kiwa-fab{position:fixed;right:16px;bottom:90px;width:48px;height:48px;border-radius:50%;',
+    '#kiwa-fab{position:fixed;left:16px;bottom:90px;width:48px;height:48px;border-radius:50%;',
     'background:linear-gradient(135deg,#FFB800,#FFC933);box-shadow:0 4px 20px rgba(255,184,0,0.45);',
     'border:0;display:flex;align-items:center;justify-content:center;color:#1a1200;z-index:99999;',
     'cursor:pointer;transition:transform 0.18s}',
@@ -193,7 +193,7 @@
     input.style.height = 'auto';
     addMessage('user', escapeHtml(text));
     history.push({role: 'user', content: text});
-    var thinking = addMessage('ai', '<span class="kp-typing"><span></span><span></span><span></span></span>');
+    var thinking = addMessage('ai', '<div style="display:flex;align-items:center;gap:8px"><span class="kp-typing"><span></span><span></span><span></span></span><span style="font-size:12px;color:#6B6B76">Kiwa is thinking\u2026</span></div>');
 
     sendAI(text).then(function(r) {
       var bubble = thinking.querySelector('.kp-msg-b');
@@ -238,7 +238,34 @@
     overlay.classList.remove('open');
   }
 
-  fab.addEventListener('click', openPanel);
+  // Make FAB draggable — tap opens the panel, drag repositions it
+  (function(){
+    var dragStart = null;
+    var wasDragged = false;
+    fab.addEventListener('touchstart', function(e){
+      var t = e.touches[0];
+      dragStart = { x: t.clientX, y: t.clientY, fabX: fab.getBoundingClientRect().left, fabY: fab.getBoundingClientRect().top };
+      wasDragged = false;
+    }, {passive: true});
+    fab.addEventListener('touchmove', function(e){
+      if(!dragStart) return;
+      var t = e.touches[0];
+      var dx = t.clientX - dragStart.x;
+      var dy = t.clientY - dragStart.y;
+      if(Math.abs(dx) > 8 || Math.abs(dy) > 8){
+        wasDragged = true;
+        fab.style.left = Math.max(8, Math.min(window.innerWidth - 56, dragStart.fabX + dx)) + 'px';
+        fab.style.top = Math.max(8, Math.min(window.innerHeight - 56, dragStart.fabY + dy)) + 'px';
+        fab.style.right = 'auto';
+        fab.style.bottom = 'auto';
+      }
+    }, {passive: true});
+    fab.addEventListener('touchend', function(){ dragStart = null; setTimeout(function(){ wasDragged = false; }, 100); });
+    fab.addEventListener('click', function(e){
+      if(wasDragged){ e.preventDefault(); e.stopPropagation(); return; }
+      openPanel();
+    });
+  })();
   document.getElementById('kpClose').addEventListener('click', closePanel);
   overlay.addEventListener('click', closePanel);
   document.getElementById('kpSend').addEventListener('click', handleSend);
@@ -314,7 +341,9 @@
             'extracteddocumentstructure:',
             'documentstructure:',
             'commandresult: extractdocumentstructure',
-            'commandresult:extractdocumentstructure'
+            'commandresult:extractdocumentstructure',
+            'commandresult:extract-document-structure',
+            'commandresult: extract-document-structure'
           ];
           var matched = false;
           for (var i = 0; i < prefixes.length; i++) {
@@ -325,9 +354,11 @@
               break;
             }
           }
-          if (!matched && d.length > 20 && d.indexOf('"Structure"') >= 0) {
+          if (!matched && d.length > 20 && (d.indexOf('"DocStructure"') >= 0 || d.indexOf('"Structure"') >= 0)) {
             matched = true;
-            if (window.KiwaOnStructure) window.KiwaOnStructure(d);
+            var startBrace = d.indexOf('{');
+            var payload2 = startBrace >= 0 ? d.substring(startBrace) : d;
+            if (window.KiwaOnStructure) window.KiwaOnStructure(payload2);
           }
           if (!matched && d.length > 40) {
             if (window.KiwaEditorAI && window.KiwaEditorAI.onRawMessage) {
@@ -346,7 +377,7 @@
       var sent = false;
       try {
         if (window.app && window.app.socket && window.app.socket.sendMessage) {
-          window.app.socket.sendMessage('extractdocumentstructure url=interactive filter=all');
+          window.app.socket.sendMessage('extractdocumentstructure url=interactive');
           sent = true;
         }
       } catch(e) {}
@@ -367,7 +398,8 @@
     var bubbleBody = bubble.querySelector('.kp-msg-b');
     extractStructure().then(function(json){
       if (!json) {
-        bubbleBody.innerHTML = '<span style="color:#F59E0B">Could not read document. Check console for raw messages.</span>';
+        bubbleBody.innerHTML = '<span style="color:#F59E0B">Could not read document. The server may have rejected the request.</span>' +
+          '<div style="font-size:11px;color:#6B6B76;margin-top:6px">Try again, or open a different document. If this persists, the extraction command format may differ from this Collabora build.</div>';
         return;
       }
       bubbleBody.innerHTML = summarizeStructure(json);
@@ -595,7 +627,7 @@
     inp.value = '';
     inp.style.height = 'auto';
     history.push({role: 'user', content: text});
-    var thinking = addMessage('ai', '<span class="kp-typing"><span></span><span></span><span></span></span>');
+    var thinking = addMessage('ai', '<div style="display:flex;align-items:center;gap:8px"><span class="kp-typing"><span></span><span></span><span></span></span><span style="font-size:12px;color:#6B6B76">Kiwa is thinking\u2026</span></div>');
 
     var settings = window.KiwaEditorSettings || {};
 

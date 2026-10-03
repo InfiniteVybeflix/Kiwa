@@ -916,7 +916,7 @@ function sendAI(){
   // Append thinking bubble
   var t = document.createElement('div');
   t.className = 'msg ai';
-  t.innerHTML = '<div class="msg-av">K</div><div class="msg-b"><span class="typing"><span></span><span></span><span></span></span></div>';
+  t.innerHTML = '<div class="msg-av">K</div><div class="msg-b"><div style="display:flex;align-items:center;gap:8px"><span class="typing"><span></span><span></span><span></span></span><span style="font-size:12px;color:var(--text-3)">Kiwa is thinking\u2026</span></div></div>';
   c.appendChild(t);
   c.scrollTop = c.scrollHeight;
 
@@ -1049,6 +1049,40 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 
   // Providers
+  var PROVIDER_MODELS = {
+    aevibron: [
+      ['aevibron-core-v3', 'Aevibron Core V3 \u2014 flagship'],
+      ['aevibron-swift-v1', 'Aevibron Swift V1 \u2014 fast'],
+      ['aevibron-quantum-v4', 'Aevibron Quantum V4 \u2014 multilingual'],
+      ['aevibron-compound-v1', 'Aevibron Compound V1 \u2014 agentic'],
+      ['aevibron-compound-lite', 'Aevibron Compound Lite \u2014 rapid'],
+      ['aevibron-allam-v2', 'Aevibron Allam V2 \u2014 Arabic']
+    ],
+    openai: [
+      ['gpt-4o', 'GPT-4o'],
+      ['gpt-4o-mini', 'GPT-4o mini'],
+      ['gpt-4-turbo', 'GPT-4 Turbo'],
+      ['o1-preview', 'o1-preview']
+    ],
+    anthropic: [
+      ['claude-sonnet-4-20250514', 'Claude Sonnet 4'],
+      ['claude-3-5-sonnet-latest', 'Claude 3.5 Sonnet'],
+      ['claude-3-5-haiku-latest', 'Claude 3.5 Haiku']
+    ],
+    custom: [
+      ['custom-model', 'Custom model \u2014 type below']
+    ]
+  };
+
+  function refreshModelOptions(provider){
+    var sel = $('#modelSelect');
+    if(!sel) return;
+    var list = PROVIDER_MODELS[provider] || PROVIDER_MODELS.aevibron;
+    sel.innerHTML = list.map(function(m){
+      return '<option value="' + m[0] + '">' + m[1] + '</option>';
+    }).join('');
+  }
+
   $$('.provider-card').forEach(function(card){
     card.addEventListener('click', function(){
       var p = card.dataset.provider;
@@ -1056,17 +1090,21 @@ document.addEventListener('DOMContentLoaded', function(){
       var rkp = $('#requestKeyPanel'); if(rkp) rkp.style.display = (p === 'aevibron') ? '' : 'none';
       var akp = $('#apiKeyPanel'); if(akp) akp.style.display = '';
       var akLabel = $('#apiKeyLabel');
-      if(akLabel){ akLabel.textContent = (p === 'aevibron') ? 'API key (optional \u2014 or request one above)' : 'API key'; }
+      if(akLabel){ akLabel.textContent = (p === 'aevibron') ? 'API key (paste, or request one above)' : 'API key'; }
       var urls = { aevibron:'https://aevibron-gateway.vercel.app/api/v1', openai:'https://api.openai.com/v1', anthropic:'https://api.anthropic.com/v1', custom:'' };
       var bu = $('#baseUrlInput'); if(bu) bu.value = urls[p] || '';
       var ak = $('#apiKeyInput');
-      if(ak) ak.placeholder = p === 'openai' ? 'sk-...' : p === 'anthropic' ? 'sk-ant-...' : 'your-api-key';
+      if(ak) ak.placeholder = p === 'openai' ? 'sk-...' : p === 'anthropic' ? 'sk-ant-...' : 'avb_...';
       var ts = $('#testStatus'); if(ts){ ts.textContent = 'Not tested'; ts.className = 'conn-status'; }
+      refreshModelOptions(p);
       persistSettings();
     });
   });
 
   // Key visibility
+  var akInp = $('#apiKeyInput');
+  if(akInp) akInp.addEventListener('input', function(){ persistSettings(); });
+
   var tkv = $('#toggleKeyVisibility');
   if(tkv) tkv.addEventListener('click', function(){
     var inp = $('#apiKeyInput'); if(!inp) return;
@@ -1128,14 +1166,17 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // Persist settings
   function persistSettings(){
+    var prev = loadSettings();
     var s = {
       theme: document.documentElement.dataset.theme,
       accent: document.documentElement.dataset.accent,
       density: document.documentElement.dataset.density,
       aiEnabled: (document.querySelector('.seg[data-ai].active') || {dataset:{}}).dataset.ai || 'on',
       provider: (document.querySelector('.provider-card.active') || {dataset:{}}).dataset.provider || 'aevibron',
-      model: ($('#modelSelect') && $('#modelSelect').value) || 'core-v3',
-      baseUrl: ($('#baseUrlInput') && $('#baseUrlInput').value) || ''
+      model: ($('#modelSelect') && $('#modelSelect').value) || 'aevibron-core-v3',
+      baseUrl: ($('#baseUrlInput') && $('#baseUrlInput').value) || '',
+      apiKey: ($('#apiKeyInput') && $('#apiKeyInput').value) || '',
+      userName: prev.userName || ''
     };
     saveSettings(s);
   }
@@ -1144,6 +1185,17 @@ document.addEventListener('DOMContentLoaded', function(){
   if(initial.theme) document.documentElement.dataset.theme = initial.theme;
   if(initial.accent) document.documentElement.dataset.accent = initial.accent;
   if(initial.density) document.documentElement.dataset.density = initial.density;
+  if(initial.apiKey && $('#apiKeyInput')) $('#apiKeyInput').value = initial.apiKey;
+  if(initial.model && $('#modelSelect')) $('#modelSelect').value = initial.model;
+  if(initial.baseUrl && $('#baseUrlInput')) $('#baseUrlInput').value = initial.baseUrl;
+  if(initial.provider){
+    var provCard = document.querySelector('.provider-card[data-provider="' + initial.provider + '"]');
+    if(provCard){
+      document.querySelectorAll('.provider-card').forEach(function(x){ x.classList.toggle('active', x===provCard); });
+      var rkp = $('#requestKeyPanel'); if(rkp) rkp.style.display = (initial.provider==='aevibron') ? '' : 'none';
+      var akp = $('#apiKeyPanel'); if(akp) akp.style.display = '';
+    }
+  }
 
   // Tabs
   $$('.tab[data-filter]').forEach(function(t){
@@ -1338,21 +1390,41 @@ document.addEventListener('DOMContentLoaded', function(){
         userMenuEl.insertBefore(nameItem, userMenuEl.firstChild);
       }
       nameItem.addEventListener('click', function(){
+        document.querySelectorAll('.menu').forEach(function(m){ m.classList.remove('open'); });
         var current = (loadSettings().userName || '').trim();
-        var v = prompt('What should we call you?', current);
-        if(v === null) return;
-        v = v.trim();
-        var s = loadSettings();
-        s.userName = v;
-        saveSettings(s);
-        // Update menu label
-        nameItem.querySelector('.k').textContent = v || 'not set';
-        // Update user card
-        var cardName = userMenuEl.querySelector('.user-card .info strong');
-        if(cardName) cardName.textContent = v || 'Kiwa User';
-        // Update greeting
-        updateGreeting();
-        toast('Name saved', v ? ('Hello, ' + v) : 'Cleared', 'success');
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+        overlay.innerHTML = '<div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:16px;padding:22px;width:min(400px,100%);box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
+          '<h3 style="font-size:16px;font-weight:600;margin-bottom:4px;color:var(--text)">What should Kiwa call you?</h3>' +
+          '<p style="font-size:12.5px;color:var(--text-3);margin-bottom:16px">Used in greetings and personalization.</p>' +
+          '<input id="kiwaNameInput" type="text" placeholder="Your name" value="' + (current.replace(/"/g,'&quot;')) + '" style="width:100%;height:44px;padding:0 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:0;margin-bottom:14px;box-sizing:border-box">' +
+          '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+            '<button id="kiwaNameCancel" style="padding:9px 16px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text);font-weight:600;font-size:13px;cursor:pointer">Cancel</button>' +
+            '<button id="kiwaNameSave" style="padding:9px 16px;background:var(--accent);color:#1a1200;border:0;border-radius:10px;font-weight:600;font-size:13px;cursor:pointer">Save</button>' +
+          '</div></div>';
+        document.body.appendChild(overlay);
+        var inp = overlay.querySelector('#kiwaNameInput');
+        inp.focus(); inp.select();
+        function close(){ overlay.remove(); }
+        function save(){
+          var v = (inp.value || '').trim();
+          var s = loadSettings();
+          s.userName = v;
+          saveSettings(s);
+          nameItem.querySelector('.k').textContent = v || 'not set';
+          var cardName = userMenuEl.querySelector('.user-card .info strong');
+          if(cardName) cardName.textContent = v || 'Kiwa User';
+          updateGreeting();
+          toast('Name saved', v ? ('Hello, ' + v) : 'Cleared', 'success');
+          close();
+        }
+        overlay.querySelector('#kiwaNameSave').addEventListener('click', save);
+        overlay.querySelector('#kiwaNameCancel').addEventListener('click', close);
+        overlay.addEventListener('click', function(e){ if(e.target===overlay) close(); });
+        inp.addEventListener('keydown', function(e){
+          if(e.key === 'Enter'){ e.preventDefault(); save(); }
+          if(e.key === 'Escape'){ close(); }
+        });
       });
     }
   }
