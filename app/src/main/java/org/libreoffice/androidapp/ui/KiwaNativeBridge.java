@@ -190,9 +190,20 @@ public class KiwaNativeBridge {
     public void openFile(String path) {
         host.runOnUiThread(() -> {
             try {
+                File f = new File(path);
+                if (!f.exists()) {
+                    Toast.makeText(activity, "File not found: " + path, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                Uri fileUri = androidx.core.content.FileProvider.getUriForFile(
+                        activity,
+                        activity.getPackageName() + ".fileprovider",
+                        f);
                 Intent intent = new Intent(activity, org.libreoffice.androidlib.LOActivity.class);
                 intent.setAction(Intent.ACTION_VIEW);
-                intent.setData(Uri.fromFile(new File(path)));
+                intent.setData(fileUri);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                 activity.startActivity(intent);
             } catch (Exception e) {
                 Toast.makeText(activity, "Cannot open: " + e.getMessage(), Toast.LENGTH_SHORT).show();

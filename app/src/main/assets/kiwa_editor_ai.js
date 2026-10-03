@@ -612,7 +612,7 @@
         provider: settings.provider || 'aevibron',
         apiKey: settings.apiKey || '',
         baseUrl: settings.baseUrl || 'https://aevibron-gateway.vercel.app/api/v1',
-        model: settings.model || 'core-v3',
+        model: settings.model || 'aevibron-core-v3',
         messages: msgs,
         systemPrompt: systemPrompt
       };
@@ -650,6 +650,65 @@
       chat.scrollTop = chat.scrollHeight;
     });
   }
+
+  // ============ KEYBOARD HANDLING ============
+  // When the soft keyboard is open, lift the panel above it so the user
+  // can see what they're typing. Uses visualViewport which reflects the
+  // actual visible area, unlike window.innerHeight.
+  (function(){
+    function adjust(){
+      if(!window.visualViewport) return;
+      var vv = window.visualViewport;
+      var keyboardHeight = window.innerHeight - vv.height - vv.offsetTop;
+      if(keyboardHeight > 80){
+        panel.style.bottom = keyboardHeight + 'px';
+        panel.style.maxHeight = Math.max(180, vv.height - 40) + 'px';
+        if(input === document.activeElement){
+          setTimeout(function(){ chat.scrollTop = chat.scrollHeight; }, 50);
+        }
+      } else {
+        panel.style.bottom = '0px';
+        panel.style.maxHeight = '72vh';
+      }
+    }
+    if(window.visualViewport){
+      window.visualViewport.addEventListener('resize', adjust);
+      window.visualViewport.addEventListener('scroll', adjust);
+    }
+    input.addEventListener('focus', function(){ setTimeout(adjust, 100); });
+    input.addEventListener('blur', function(){ setTimeout(adjust, 100); });
+  })();
+
+  // ============ SOFT KEYBOARD LIFT ============
+  // When the on-screen keyboard is open, visualViewport shrinks. Use that
+  // to lift the panel so the input stays visible while typing.
+  (function(){
+    var panelEl = document.getElementById('kiwa-panel');
+    var inputEl = document.getElementById('kpInput');
+    var chatEl = document.getElementById('kpChat');
+    if(!panelEl || !inputEl) return;
+
+    function adjust(){
+      if(!window.visualViewport) return;
+      var vv = window.visualViewport;
+      var kbHeight = window.innerHeight - vv.height - vv.offsetTop;
+      if(kbHeight > 80){
+        panelEl.style.bottom = kbHeight + 'px';
+        panelEl.style.maxHeight = Math.max(180, vv.height - 40) + 'px';
+        if(chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+      } else {
+        panelEl.style.bottom = '0px';
+        panelEl.style.maxHeight = '72vh';
+      }
+    }
+
+    if(window.visualViewport){
+      window.visualViewport.addEventListener('resize', adjust);
+      window.visualViewport.addEventListener('scroll', adjust);
+    }
+    inputEl.addEventListener('focus', function(){ setTimeout(adjust, 120); });
+    inputEl.addEventListener('blur', function(){ setTimeout(adjust, 120); });
+  })();
 
   console.log('Kiwa AI editor panel installed (with structure extraction)');
 

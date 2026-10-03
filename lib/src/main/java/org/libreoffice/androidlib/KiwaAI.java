@@ -25,7 +25,7 @@ public final class KiwaAI {
             String provider = payload.optString("provider", "aevibron");
             String baseUrl = payload.optString("baseUrl", "").trim();
             String apiKey = payload.optString("apiKey", "").trim();
-            String model = payload.optString("model", "core-v3").trim();
+            String model = payload.optString("model", "aevibron-core-v3").trim();
             String systemPrompt = payload.optString("systemPrompt", "").trim();
             JSONArray messages = payload.optJSONArray("messages");
 
@@ -80,7 +80,10 @@ public final class KiwaAI {
                 body.put("stream", false);
             }
 
-            String endpoint = provider.equals("anthropic") ? "/messages" : "/chat/completions";
+            String endpoint;
+            if (provider.equals("anthropic")) endpoint = "/messages";
+            else if (provider.equals("aevibron")) endpoint = "/chat";
+            else endpoint = "/chat/completions";
             URL url = new URL(baseUrl + endpoint);
 
             conn = (HttpURLConnection) url.openConnection();

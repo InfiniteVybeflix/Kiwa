@@ -551,9 +551,12 @@
       <div class="setting">
         <label>Model</label>
         <select class="settings-input" id="modelSelect">
-          <option value="core-v3">core-v3 (default)</option>
-          <option value="core-v3-mini">core-v3-mini (faster)</option>
-          <option value="core-v3-pro">core-v3-pro (most capable)</option>
+          <option value="aevibron-core-v3">Aevibron Core V3 — flagship (default)</option>
+          <option value="aevibron-swift-v1">Aevibron Swift V1 — fast</option>
+          <option value="aevibron-quantum-v4">Aevibron Quantum V4 — multilingual</option>
+          <option value="aevibron-compound-v1">Aevibron Compound V1 — agentic</option>
+          <option value="aevibron-compound-lite">Aevibron Compound Lite — rapid</option>
+          <option value="aevibron-allam-v2">Aevibron Allam V2 — Arabic</option>
         </select>
       </div>
       <div class="setting">
@@ -1301,10 +1304,67 @@ document.addEventListener('DOMContentLoaded', function(){
   renderShortcuts();
   switchView('home');
 
-  // Greeting based on time
-  var h = new Date().getHours();
-  var greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-  var g = $('#greeting'); if(g) g.textContent = greet + ', welcome to Kiwa';
+  // Greeting — time-aware, personalized, refresh on visibility
+  function updateGreeting(){
+    var h = new Date().getHours();
+    var greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+    var s = loadSettings();
+    var name = (s.userName || '').trim();
+    var g = $('#greeting');
+    if(g) {
+      g.textContent = name ? (greet + ', ' + name) : (greet + ', welcome to Kiwa');
+    }
+  }
+  updateGreeting();
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden) updateGreeting();
+  });
+  setInterval(updateGreeting, 60000);
+
+  // Name entry in user menu
+  var userNameMenuItem = document.getElementById('setUserNameBtn');
+  if(!userNameMenuItem){
+    var userMenuEl = $('#userMenu');
+    if(userMenuEl){
+      var nameItem = document.createElement('div');
+      nameItem.className = 'menu-item';
+      nameItem.id = 'setUserNameBtn';
+      nameItem.innerHTML = 'Set your name<span class="k">' + ((loadSettings().userName) || 'not set') + '</span>';
+      // Insert after user card
+      var uc = userMenuEl.querySelector('.user-card');
+      if(uc && uc.nextSibling){
+        userMenuEl.insertBefore(nameItem, uc.nextSibling);
+      } else {
+        userMenuEl.insertBefore(nameItem, userMenuEl.firstChild);
+      }
+      nameItem.addEventListener('click', function(){
+        var current = (loadSettings().userName || '').trim();
+        var v = prompt('What should we call you?', current);
+        if(v === null) return;
+        v = v.trim();
+        var s = loadSettings();
+        s.userName = v;
+        saveSettings(s);
+        // Update menu label
+        nameItem.querySelector('.k').textContent = v || 'not set';
+        // Update user card
+        var cardName = userMenuEl.querySelector('.user-card .info strong');
+        if(cardName) cardName.textContent = v || 'Kiwa User';
+        // Update greeting
+        updateGreeting();
+        toast('Name saved', v ? ('Hello, ' + v) : 'Cleared', 'success');
+      });
+    }
+  }
+
+  // Sync user card name from settings on load
+  (function(){
+    var s = loadSettings();
+    if(s.userName){
+      var cardName = document.querySelector('#userMenu .user-card .info strong');
+      if(cardName) cardName.textContent = s.userName;
+    }
+  })();
 
   // Reload files if native bridge provides
   if(hasNative()){
