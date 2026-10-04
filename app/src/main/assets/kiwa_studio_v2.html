@@ -303,6 +303,122 @@
     .qa-card h4{font-size:12px}
     .qa-card p{display:none}
   }
+
+  /* ============ AI CHAT HISTORY DRAWER ============ */
+  .ai-head-btn {
+    width: 28px; height: 28px;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-2);
+    transition: background var(--t);
+    flex-shrink: 0;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+  }
+  .ai-head-btn:hover { background: var(--surface-h); color: var(--text); }
+
+  .ai-history-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .28s cubic-bezier(.4,0,.2,1);
+    z-index: 9;
+  }
+  .ai-history-backdrop.open { opacity: 1; pointer-events: auto; }
+
+  .ai-history-drawer {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    width: 88%;
+    max-width: 340px;
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    transform: translateX(-100%);
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 4px 0 24px rgba(0,0,0,.3);
+  }
+  .ai-history-drawer.open { transform: translateX(0); }
+
+  .hist-head {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-s);
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0;
+  }
+  .hist-head h4 {
+    flex: 1; font-size: 14px; font-weight: 600;
+    margin: 0;
+  }
+  .hist-close {
+    width: 28px; height: 28px;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-2);
+    background: transparent; border: 0; cursor: pointer;
+  }
+  .hist-close:hover { background: var(--surface-h); color: var(--text); }
+
+  .hist-list {
+    flex: 1; overflow-y: auto;
+    padding: 8px;
+  }
+  .hist-empty {
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--text-3);
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .hist-empty svg { margin-bottom: 12px; opacity: .5; }
+
+  .hist-item {
+    padding: 10px 10px 10px 12px;
+    border-radius: 9px;
+    cursor: pointer;
+    margin-bottom: 2px;
+    display: flex; align-items: center; gap: 10px;
+    transition: background var(--t);
+    position: relative;
+  }
+  .hist-item:hover { background: var(--surface); }
+  .hist-item.active { background: var(--accent-s); }
+  .hist-item.active .hist-item-title { color: var(--accent); font-weight: 600; }
+
+  .hist-item-content { flex: 1; min-width: 0; }
+  .hist-item-title {
+    font-size: 13px; font-weight: 500;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .hist-item-meta {
+    font-size: 11px;
+    color: var(--text-3);
+  }
+  .hist-item-del {
+    width: 26px; height: 26px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-3);
+    opacity: 0;
+    transition: all var(--t);
+    flex-shrink: 0;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+  }
+  .hist-item:hover .hist-item-del,
+  .hist-item.active .hist-item-del { opacity: 1; }
+  .hist-item-del:hover { background: rgba(239,68,68,.15); color: var(--err); }
+
 </style>
 </head>
 <body>
@@ -452,8 +568,14 @@
   </main>
   <aside class="ai-panel" id="aiPanel">
     <div class="ai-head">
+      <button class="ai-head-btn" id="histToggle" title="Chat history">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
       <div class="ai-avatar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z"/></svg></div>
-      <div><h3>Kiwa AI</h3><p>Powered by Aevibron</p></div>
+      <div style="flex:1; min-width:0;"><h3>Kiwa AI</h3><p id="aiStatusText">Your intelligent assistant</p></div>
+      <button class="ai-head-btn" id="newChatBtn" title="New chat">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
       <button class="ai-close" id="aiClose"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
     </div>
     <div class="ai-chips">
@@ -473,6 +595,18 @@
       </div>
       <div class="ai-hint">Kiwa AI can make mistakes. Enter to send.</div>
     </div>
+  
+    <!-- Chat history drawer -->
+    <div class="ai-history-backdrop" id="histBackdrop"></div>
+    <aside class="ai-history-drawer" id="histDrawer">
+      <div class="hist-head">
+        <h4>Chat history</h4>
+        <button class="hist-close" id="histClose">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="hist-list" id="histList"></div>
+    </aside>
   </aside>
 </div>
 <nav class="mobile-nav" id="mobileNav">
@@ -591,6 +725,7 @@ var state = {
   pendingAI: {},       // callId -> {resolve}
   callSeq: 0,
   aiHistory: [],
+  _aiRestored: false,
   filter: { home: 'all', recent: 'all' },
   files: [],
   selected: -1
@@ -898,20 +1033,279 @@ function seedChat(){
   c.innerHTML = '<div class="msg ai"><div class="msg-av">K</div><div class="msg-b">Hi! I\'m <strong>Kiwa AI</strong>. I can help you write, edit, analyze, and create — all inside your documents.<br><br>Try asking me to <code>summarize</code> a file, <code>rewrite</code> a paragraph, or <code>generate</code> a new document from a prompt.</div></div>';
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+// ============ CHAT STORE ============
+// Each conversation: { id, title, messages: [{role, content}], createdAt, updatedAt }
+// All are persisted in SharedPreferences under homeConversations.
+function loadConversations(){
+  var s = loadSettings();
+  var list = s.homeConversations;
+  if(!list || !Array.isArray(list)) list = [];
+  // migrate legacy single-chat history if present
+  if(!list.length && s.homeChat && s.homeChat.length){
+    list = [{
+      id: 'c_' + Date.now(),
+      title: deriveTitle(s.homeChat) || 'Earlier chat',
+      messages: s.homeChat,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    }];
+    s.homeConversations = list;
+    delete s.homeChat;
+    saveSettings(s);
+  }
+  return list;
+}
+function saveConversations(list){
+  var s = loadSettings();
+  s.homeConversations = list;
+  saveSettings(s);
+}
+function deriveTitle(messages){
+  if(!messages || !messages.length) return '';
+  for(var i = 0; i < messages.length; i++){
+    if(messages[i].role === 'user' && messages[i].content){
+      var t = messages[i].content.trim().replace(/\s+/g, ' ');
+      return t.length > 42 ? t.substring(0, 42) + '\u2026' : t;
+    }
+  }
+  return '';
+}
+function humanTimeAgo(ts){
+  var d = Date.now() - ts;
+  var sec = d/1000, min = sec/60, hr = min/60, day = hr/24;
+  if(sec < 60) return 'just now';
+  if(min < 60) return Math.floor(min) + 'm ago';
+  if(hr < 24) return Math.floor(hr) + 'h ago';
+  if(day < 7) return Math.floor(day) + 'd ago';
+  return new Date(ts).toLocaleDateString();
+}
+
+function currentConversation(){
+  var list = loadConversations();
+  var s = loadSettings();
+  var id = s.homeActiveConversation;
+  if(!id){
+    if(list.length){ id = list[0].id; }
+    else {
+      // create first conversation
+      var c = {
+        id: 'c_' + Date.now(),
+        title: 'New chat',
+        messages: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      list.push(c);
+      saveConversations(list);
+      id = c.id;
+    }
+    s.homeActiveConversation = id;
+    saveSettings(s);
+  }
+  for(var i = 0; i < list.length; i++) if(list[i].id === id) return list[i];
+  // if id is stale, fall back to first
+  if(list.length) return list[0];
+  return null;
+}
+
+function setActiveConversation(id){
+  var s = loadSettings();
+  s.homeActiveConversation = id;
+  saveSettings(s);
+  renderConversation();
+  renderHistoryList();
+  closeHistoryDrawer();
+}
+
+function renderConversation(){
+  var conv = currentConversation();
+  var c = $('#aiChat');
+  if(!c || !conv) return;
+  c.innerHTML = '';
+  if(!conv.messages.length){
+    c.innerHTML = '<div class="msg ai"><div class="msg-av">K</div><div class="msg-b">Hi! I\'m <strong>Kiwa AI</strong>. I can help you write, edit, analyze, and create \u2014 all inside your documents.<br><br>Try asking me to <code>summarize</code> a file, <code>rewrite</code> a paragraph, or <code>generate</code> a new document from a prompt.</div></div>';
+  } else {
+    for(var i = 0; i < conv.messages.length; i++){
+      var m = conv.messages[i];
+      var d = document.createElement('div');
+      d.className = 'msg ' + (m.role === 'user' ? 'user' : 'ai');
+      d.innerHTML = '<div class="msg-av">' + (m.role === 'user' ? 'You' : 'K') + '</div><div class="msg-b">' + (m.role === 'user' ? escapeHtml(m.content) : formatAIText(m.content)) + '</div>';
+      c.appendChild(d);
+    }
+  }
+  c.scrollTop = c.scrollHeight;
+  var p = $('#aiStatusText');
+  if(p) p.textContent = conv.messages.length ? (conv.messages.length + ' messages') : 'New conversation';
+}
+
+function appendToConversation(role, content){
+  var list = loadConversations();
+  var s = loadSettings();
+  var id = s.homeActiveConversation;
+  var conv = null;
+  for(var i = 0; i < list.length; i++) if(list[i].id === id){ conv = list[i]; break; }
+  if(!conv){
+    conv = { id: 'c_' + Date.now(), title: 'New chat', messages: [], createdAt: Date.now(), updatedAt: Date.now() };
+    list.push(conv);
+    s.homeActiveConversation = conv.id;
+    saveSettings(s);
+  }
+  conv.messages.push({role: role, content: content});
+  conv.updatedAt = Date.now();
+  if(conv.title === 'New chat' || !conv.title){
+    var t = deriveTitle(conv.messages);
+    if(t) conv.title = t;
+  }
+  saveConversations(list);
+}
+
+function renderHistoryList(){
+  var list = loadConversations();
+  var el = $('#histList');
+  if(!el) return;
+  var s = loadSettings();
+  var activeId = s.homeActiveConversation;
+  if(!list.length){
+    el.innerHTML = '<div class="hist-empty"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><div>No conversations yet</div><div style="margin-top:4px">Start a new chat to see it here.</div></div>';
+    return;
+  }
+  // sort by updatedAt desc
+  var sorted = list.slice().sort(function(a,b){ return (b.updatedAt||0) - (a.updatedAt||0); });
+  el.innerHTML = sorted.map(function(c){
+    var active = c.id === activeId ? ' active' : '';
+    var count = (c.messages || []).length;
+    return '<div class="hist-item' + active + '" data-id="' + c.id + '">' +
+      '<div class="hist-item-content">' +
+        '<div class="hist-item-title">' + escapeHtml(c.title || 'Untitled') + '</div>' +
+        '<div class="hist-item-meta">' + count + ' message' + (count === 1 ? '' : 's') + ' \u00b7 ' + humanTimeAgo(c.updatedAt || c.createdAt || Date.now()) + '</div>' +
+      '</div>' +
+      '<button class="hist-item-del" data-del="' + c.id + '" title="Delete">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>' +
+      '</button>' +
+    '</div>';
+  }).join('');
+  el.querySelectorAll('.hist-item').forEach(function(row){
+    row.addEventListener('click', function(e){
+      if(e.target.closest('.hist-item-del')) return;
+      setActiveConversation(row.dataset.id);
+    });
+  });
+  el.querySelectorAll('.hist-item-del').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var id = btn.dataset.del;
+      var list = loadConversations().filter(function(c){ return c.id !== id; });
+      saveConversations(list);
+      var s = loadSettings();
+      if(s.homeActiveConversation === id){
+        s.homeActiveConversation = list.length ? list[0].id : null;
+        saveSettings(s);
+      }
+      renderConversation();
+      renderHistoryList();
+      toast('Chat deleted', '', 'success');
+    });
+  });
+}
+
+function openHistoryDrawer(){
+  var d = $('#histDrawer');
+  var b = $('#histBackdrop');
+  if(d) d.classList.add('open');
+  if(b) b.classList.add('open');
+  renderHistoryList();
+}
+function closeHistoryDrawer(){
+  var d = $('#histDrawer');
+  var b = $('#histBackdrop');
+  if(d) d.classList.remove('open');
+  if(b) b.classList.remove('open');
+}
+
+function startNewChat(){
+  var list = loadConversations();
+  var c = {
+    id: 'c_' + Date.now(),
+    title: 'New chat',
+    messages: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  list.push(c);
+  saveConversations(list);
+  var s = loadSettings();
+  s.homeActiveConversation = c.id;
+  saveSettings(s);
+  renderConversation();
+  renderHistoryList();
+  closeHistoryDrawer();
+  setTimeout(function(){ var inp = $('#aiInput'); if(inp) inp.focus(); }, 200);
+}
+
+function detectCreateIntent(text){
+  if(!text) return null;
+  var t = text.toLowerCase();
+  // "create a document", "make me a doc", "write a report", "generate a spreadsheet"
+  var docWords = ['document','doc','letter','report','essay','article','memo','note','text file'];
+  var sheetWords = ['spreadsheet','sheet','table','budget','invoice','ledger','excel','tracker'];
+  var slideWords = ['presentation','slides','deck','powerpoint','pitch'];
+  var createWords = ['create','make','write','generate','draft','produce','new'];
+
+  function hasAny(list){ for(var i=0;i<list.length;i++){ if(t.indexOf(list[i])>=0) return true; } return false; }
+  if(!hasAny(createWords)) return null;
+
+  if(hasAny(slideWords)) return 'slide';
+  if(hasAny(sheetWords)) return 'sheet';
+  if(hasAny(docWords)) return 'doc';
+  return null;
+}
+
+function showCreateConfirmCard(container, type, content, userPrompt){
+  var typeNames = { doc:'Document (.docx)', sheet:'Spreadsheet (.xlsx)', slide:'Presentation (.pptx)' };
+  var card = document.createElement('div');
+  card.style.cssText = 'background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:14px;margin-top:6px';
+  var preview = content.length > 400 ? content.substring(0,400) + '\u2026' : content;
+  card.innerHTML =
+    '<div style="font-weight:600;margin-bottom:6px;color:var(--accent)">\ud83d\udcc4 Create ' + (typeNames[type] || 'document') + '?</div>' +
+    '<div style="font-size:12px;color:var(--text-3);margin-bottom:10px">I\'ll create a new file and paste this content:</div>' +
+    '<pre style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;line-height:1.5;max-height:120px;overflow:auto;white-space:pre-wrap;color:var(--text-2);margin-bottom:12px">' + escapeHtml(preview) + '</pre>' +
+    '<div style="display:flex;gap:8px">' +
+      '<button data-cf="yes" style="flex:1;padding:9px;background:var(--accent);color:#1a1200;border:0;border-radius:9px;font-weight:600;font-size:13px;cursor:pointer">Yes, create it</button>' +
+      '<button data-cf="no" style="padding:9px 16px;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:9px;font-weight:600;font-size:13px;cursor:pointer">Cancel</button>' +
+    '</div>';
+  container.appendChild(card);
+  card.querySelector('[data-cf="no"]').addEventListener('click', function(){
+    card.remove();
+    toast('Cancelled', 'No file was created', 'info');
+  });
+  card.querySelector('[data-cf="yes"]').addEventListener('click', function(){
+    card.remove();
+    if(hasNative() && KiwaNative.createFileWithContent){
+      KiwaNative.createFileWithContent(type, content);
+      toast('Opening editor', 'Your new document is ready', 'success');
+    } else {
+      toast('Preview mode', 'Native bridge unavailable', 'error');
+    }
+  });
+}
+
 function sendAI(){
   var inp = $('#aiInput');
   var text = (inp.value || '').trim();
   if(!text) return;
   var c = $('#aiChat');
   var settings = collectAISettings();
+  var conv = currentConversation();
+  var history = (conv && conv.messages) ? conv.messages.slice(-10) : [];
 
-  // Append user message
+  // Append user message (visual + persisted)
   var u = document.createElement('div');
   u.className = 'msg user';
   u.innerHTML = '<div class="msg-av">You</div><div class="msg-b">' + escapeHtml(text) + '</div>';
   c.appendChild(u);
   inp.value = '';
   c.scrollTop = c.scrollHeight;
+  appendToConversation('user', text);
 
   // Append thinking bubble
   var t = document.createElement('div');
@@ -920,7 +1314,6 @@ function sendAI(){
   c.appendChild(t);
   c.scrollTop = c.scrollHeight;
 
-  var history = (state.aiHistory || []).slice(-10);
   history.push({ role: 'user', content: text });
 
   var payload = {
@@ -935,12 +1328,22 @@ function sendAI(){
   aiRequest(payload, false).then(function(r){
     var bubble = t.querySelector('.msg-b');
     if(r && r.ok && r.text){
-      bubble.innerHTML = formatAIText(r.text);
-      state.aiHistory = history.concat([{ role: 'assistant', content: r.text }]);
+      var intentType = detectCreateIntent(text);
+      if(intentType){
+        // show the AI's content plus a create-confirmation card
+        bubble.innerHTML = formatAIText(r.text);
+        var msgContainer = t;
+        showCreateConfirmCard(msgContainer, intentType, r.text, text);
+      } else {
+        bubble.innerHTML = formatAIText(r.text);
+      }
+      appendToConversation('assistant', r.text);
+      renderHistoryList();
+      var p = $('#aiStatusText');
+      if(p){ var cc = currentConversation(); p.textContent = cc.messages.length + ' messages'; }
     } else {
       bubble.innerHTML = '<span style="color:var(--err)">' + escapeHtml((r && r.error) || 'Unknown error') + '</span>';
-      // remove the last user msg from history so retry is clean
-      state.aiHistory = history.slice(0, -1);
+      // keep store as-is on error; user can retry
     }
     c.scrollTop = c.scrollHeight;
   });
@@ -980,6 +1383,15 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // AI
   var aiBtn = $('#aiBtn'); if(aiBtn) aiBtn.addEventListener('click', function(){ app.classList.toggle('ai-open'); });
+  var histToggle = $('#histToggle');
+  if(histToggle) histToggle.addEventListener('click', openHistoryDrawer);
+  var histClose = $('#histClose');
+  if(histClose) histClose.addEventListener('click', closeHistoryDrawer);
+  var histBackdrop = $('#histBackdrop');
+  if(histBackdrop) histBackdrop.addEventListener('click', closeHistoryDrawer);
+  var newChatBtn = $('#newChatBtn');
+  if(newChatBtn) newChatBtn.addEventListener('click', startNewChat);
+
   var aiClose = $('#aiClose'); if(aiClose) aiClose.addEventListener('click', closeAI);
   var sbAI = $('#sbAI'); if(sbAI) sbAI.addEventListener('click', openAI);
   $$('[data-ai-open]').forEach(function(el){ el.addEventListener('click', function(){ openAI(); var v = el.dataset.aiOpen; if(v && v !== 'true' && $('#aiInput')) $('#aiInput').value = v; }); });
@@ -1348,7 +1760,7 @@ document.addEventListener('DOMContentLoaded', function(){
   window.KiwaRefreshStorage = refreshStorage;
 
   // Seed chat + render everything
-  seedChat();
+  try { renderConversation(); } catch(e) { try { seedChat(); } catch(e2){} }
   renderAll();
   renderTemplates('#homeTemps');
   renderTemplates('#allTemps');

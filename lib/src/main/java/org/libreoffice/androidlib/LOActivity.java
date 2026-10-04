@@ -134,6 +134,7 @@ public class LOActivity extends AppCompatActivity {
 
     /// Unique number identifying this app + document.
     private long loadDocumentMillis = 0;
+    private String pendingAIContent = null;
 
     @Nullable
     private URI documentUri;
@@ -348,6 +349,9 @@ public class LOActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         this.savedInstanceState = savedInstanceState;
+        try {
+            pendingAIContent = getIntent().getStringExtra("kiwa_ai_content");
+        } catch (Exception ignored) {}
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         sPrefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
 
@@ -542,6 +546,14 @@ public class LOActivity extends AppCompatActivity {
 
             WebSettings webSettings = mWebView.getSettings();
             webSettings.setJavaScriptEnabled(true);
+            // PDF and view-only documents: lock zoom to avoid the tile parsing
+            // bug that fires on fast pinch-zoom in the mobile renderer.
+            String mime = getMimeType();
+            if (mime != null && (mime.equals("application/pdf") || !isDocEditable)) {
+                webSettings.setSupportZoom(false);
+                webSettings.setBuiltInZoomControls(false);
+                webSettings.setDisplayZoomControls(false);
+            }
             mWebView.addJavascriptInterface(this, "COOLMessageHandler");
             mWebView.addJavascriptInterface(new KiwaEditorAI(getApplicationContext(), mWebView), "KiwaEditorAI");
 
@@ -1037,6 +1049,34 @@ public class LOActivity extends AppCompatActivity {
         }
     }
 
+    /** If a piece of AI-generated content was attached to the launch intent,
+     *  insert it into the document via Uno once the editor is ready. */
+    private void insertPendingAIContent() {
+        if (pendingAIContent == null || pendingAIContent.isEmpty()) return;
+        final String content = pendingAIContent;
+        pendingAIContent = null;
+        // small delay so the editor is fully interactive
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            try {
+                String escaped = content.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
+                String uno = ".uno:InsertText";
+                String args = "\"text\":{\"type\":\"string\",\"value\":\"" + escaped + "\"}";
+                String msg = "uno " + uno + " " + args;
+                if (mWebView != null) {
+                    mWebView.post(() -> {
+                        try {
+                            mWebView.evaluateJavascript(
+                                "try{ if(window.socket&&window.socket.sendMessage){window.socket.sendMessage(" + org.json.JSONObject.quote(msg) + ");} }catch(e){}",
+                                null);
+                        } catch (Exception ignored) {}
+                    });
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "insertPendingAIContent failed: " + e.getMessage());
+            }
+        }, 1500);
+    }
+
     @Override
     protected void onDestroy() {
         stopWatchingForHardwareKeyboard();
@@ -1477,6 +1517,7 @@ public class LOActivity extends AppCompatActivity {
                     if (BuildConfig.GOOGLE_PLAY_ENABLED && rateAppController != null)
                         rateAppController.askUserForRating();
                     injectKiwaAIPanel();
+                    insertPendingAIContent();
                     return;
                 }
 

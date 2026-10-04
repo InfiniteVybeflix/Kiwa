@@ -211,9 +211,25 @@ public class KiwaNativeBridge {
         });
     }
 
+    private String pendingAIContent = null;
+
     @JavascriptInterface
     public void createFile(String type) {
+        pendingAIContent = null;
         host.runOnUiThread(() -> host.createAndOpenFile(type));
+    }
+
+    @JavascriptInterface
+    public void createFileWithContent(String type, String content) {
+        pendingAIContent = content;
+        host.runOnUiThread(() -> host.createAndOpenFile(type));
+    }
+
+    /** Called by the host after the SAF create dialog returns a URI. */
+    public String consumePendingAIContent() {
+        String c = pendingAIContent;
+        pendingAIContent = null;
+        return c;
     }
 
     @JavascriptInterface

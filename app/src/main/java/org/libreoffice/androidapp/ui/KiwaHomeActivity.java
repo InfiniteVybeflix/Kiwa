@@ -21,6 +21,8 @@ import androidx.core.view.WindowInsetsCompat;
 public class KiwaHomeActivity extends AppCompatActivity {
     private static final int REQ_CREATE = 2001;
     private static final int REQ_IMPORT = 2002;
+    public static final String EXTRA_AI_CONTENT = "kiwa_ai_content";
+    private KiwaNativeBridge bridge;
     private WebView webView;
 
     @Override
@@ -114,7 +116,8 @@ public class KiwaHomeActivity extends AppCompatActivity {
             }
         });
 
-        webView.addJavascriptInterface(new KiwaNativeBridge(this), "KiwaNative");
+        bridge = new KiwaNativeBridge(this);
+        webView.addJavascriptInterface(bridge, "KiwaNative");
         webView.loadUrl("file:///android_asset/kiwa_studio_v2.html");
     }
 
@@ -198,6 +201,12 @@ public class KiwaHomeActivity extends AppCompatActivity {
             Intent open = new Intent(this, org.libreoffice.androidlib.LOActivity.class);
             open.setAction(Intent.ACTION_EDIT);
             open.setData(uri);
+            if (bridge != null) {
+                String content = bridge.consumePendingAIContent();
+                if (content != null && !content.isEmpty()) {
+                    open.putExtra(EXTRA_AI_CONTENT, content);
+                }
+            }
             try {
                 startActivity(open);
             } catch (Exception e) {

@@ -374,6 +374,11 @@
 
   function extractStructure(){
     return new Promise(function(resolve){
+      // The server-side extract API isn't reachable from the mobile WebView
+      // (it needs a document URL, not 'interactive'). We try the socket once
+      // for good measure, then fall back to reading the visible document text
+      // directly from the DOM. The fallback returns a simpler structure but
+      // is real and works everywhere.
       var sent = false;
       try {
         if (window.app && window.app.socket && window.app.socket.sendMessage) {
@@ -381,16 +386,63 @@
           sent = true;
         }
       } catch(e) {}
-      if (!sent) { resolve(null); return; }
-      extractionResolvers.push(resolve);
-      setTimeout(function(){
-        var idx = extractionResolvers.indexOf(resolve);
-        if (idx >= 0) {
-          extractionResolvers.splice(idx, 1);
-          resolve(null);
-        }
-      }, 15000);
+
+      if (sent) {
+        extractionResolvers.push(function(json){
+          if (json) { resolve(json); return; }
+          resolve(readDocumentFromDom());
+        });
+        setTimeout(function(){
+          var idx = extractionResolvers.length - 1;
+          if (idx >= 0) {
+            // still pending — fall through to DOM reader
+            try { resolve(readDocumentFromDom()); } catch(e){ resolve(null); }
+          }
+        }, 6000);
+      } else {
+        resolve(readDocumentFromDom());
+      }
     });
+  }
+
+  function readDocumentFromDom(){
+    try {
+      // Collabora renders each text run as an element. Grab all visible text.
+      // Different builds use different class names; try several.
+      var selectors = [
+        '.text-run',
+        '[class*="text-run"]',
+        '.Paragraph',
+        '.paragraph',
+        '.TextParagraph',
+        '[class*="Paragraph"]'
+      ];
+      var parts = [];
+      for (var s = 0; s < selectors.length; s++) {
+        var nodes = document.querySelectorAll(selectors[s]);
+        if (nodes.length > 0) {
+          for (var i = 0; i < nodes.length; i++) {
+            var t = (nodes[i].innerText || nodes[i].textContent || '').trim();
+            if (t) parts.push(t);
+          }
+          if (parts.length > 0) break;
+        }
+      }
+      // Final fallback — the visible text of the document area
+      if (parts.length === 0) {
+        var area = document.querySelector('.leaflet-container') || document.body;
+        var all = (area.innerText || '').split('\n').map(function(x){ return x.trim(); }).filter(function(x){ return x.length > 0; });
+        parts = all.slice(0, 200);
+      }
+      // Build a pseudo-structure that the AI can reason about
+      var out = { DocStructure: { Note: 'Extracted from rendered DOM (server extract API unavailable on mobile).', Lines: {} } };
+      for (var j = 0; j < parts.length && j < 200; j++) {
+        out.DocStructure.Lines['Line.' + j] = { content: parts[j], type: 'text' };
+      }
+      return JSON.stringify(out);
+    } catch(e){
+      return null;
+    }
   }
 
   function readDocumentAndDisplay(){
@@ -678,6 +730,10 @@
       } else {
         bubble.innerHTML = formatText(r.text);
         history.push({role: 'assistant', content: r.text});
+        // If the user's request implies document creation, offer it
+        if(detectCreateIntentLocal(text) && window.KiwaEditorAI && window.KiwaEditorAI.saveEditorSettings){
+          showCreateConfirmCardLocal(thinking, detectCreateIntentLocal(text), r.text);
+        }
       }
       chat.scrollTop = chat.scrollHeight;
     });
@@ -741,6 +797,141 @@
     inputEl.addEventListener('focus', function(){ setTimeout(adjust, 120); });
     inputEl.addEventListener('blur', function(){ setTimeout(adjust, 120); });
   })();
+
+  // ============ VIEWPORT META (keyboard resize) ============
+  // Cool.html has its own viewport meta. We replace it with one that
+  // tells Chrome on Android to resize the layout viewport when the
+  // soft keyboard appears. This is the official Chromium fix (Chrome 108+).
+  (function(){
+    var existing = document.querySelector('meta[name="viewport"]');
+    if (existing) existing.remove();
+    var meta = document.createElement('meta');
+    meta.name = 'viewport';
+    meta.content = 'width=device-width, initial-scale=1, interactive-widget=resizes-content, viewport-fit=cover';
+    document.head.appendChild(meta);
+  })();
+
+  // ============ DRAGGABLE PANEL ============
+  // If the keyboard still covers it on some devices, the user can drag
+  // the whole panel up by the header. Last-resort usability.
+  (function(){
+    var head = panel.querySelector('.kp-head');
+    if(!head) return;
+    var dragY = null;
+    var startTop = 0;
+    head.style.cursor = 'grab';
+    head.addEventListener('touchstart', function(e){
+      var t = e.touches[0];
+      dragY = t.clientY;
+      startTop = panel.getBoundingClientRect().top;
+    }, {passive: true});
+    head.addEventListener('touchmove', function(e){
+      if(dragY === null) return;
+      var t = e.touches[0];
+      var dy = t.clientY - dragY;
+      var newTop = Math.max(8, startTop + dy);
+      panel.style.top = newTop + 'px';
+      panel.style.bottom = 'auto';
+      panel.style.transform = 'none';
+    }, {passive: true});
+    head.addEventListener('touchend', function(){ dragY = null; });
+  })();
+
+  // ============ CHAT HISTORY PERSISTENCE ============
+  function persistEditorChat(){
+    try {
+      var s = window.KiwaEditorSettings || {};
+      if (!s.editorChat) s.editorChat = [];
+      s.editorChat = history.slice(-30);
+      if (window.KiwaEditorAI && window.KiwaEditorAI.saveEditorSettings) {
+        window.KiwaEditorAI.saveEditorSettings(JSON.stringify(s));
+      } else {
+        try {
+          var existing = window.KiwaEditorAI && window.KiwaEditorAI.getSettings ? JSON.parse(window.KiwaEditorAI.getSettings()) : {};
+          existing.editorChat = s.editorChat;
+          // no save method yet — fall through
+        } catch(e){}
+      }
+    } catch(e){}
+  }
+
+  (function(){
+    try {
+      if (window.KiwaEditorAI && window.KiwaEditorAI.getSettings) {
+        var raw = window.KiwaEditorAI.getSettings();
+        if (raw) {
+          var s = JSON.parse(raw);
+          window.KiwaEditorSettings = s;
+          if (s.editorChat && s.editorChat.length) {
+            history = s.editorChat.slice(-30);
+            // restore visible messages
+            for (var i = 0; i < history.length; i++) {
+              var m = history[i];
+              if (m.role === 'user') addMessage('user', escapeHtml(m.content));
+              else addMessage('ai', formatText(m.content));
+            }
+          }
+        }
+      }
+    } catch(e){}
+  })();
+
+  // patch addMessage to save after each
+  var _origAddMessage = addMessage;
+  addMessage = function(role, html){
+    var el = _origAddMessage(role, html);
+    try { persistEditorChat(); } catch(e){}
+    return el;
+  };
+
+  // ============ CREATE INTENT (editor) ============
+  function detectCreateIntentLocal(text){
+    if(!text) return null;
+    var t = text.toLowerCase();
+    var docWords = ['document','doc','letter','report','essay','article','memo','note'];
+    var sheetWords = ['spreadsheet','sheet','table','budget','invoice','tracker'];
+    var slideWords = ['presentation','slides','deck','powerpoint','pitch'];
+    var createWords = ['create','make','write','generate','draft','produce','new'];
+    function hasAny(list){ for(var i=0;i<list.length;i++){ if(t.indexOf(list[i])>=0) return true; } return false; }
+    if(!hasAny(createWords)) return null;
+    if(hasAny(slideWords)) return 'slide';
+    if(hasAny(sheetWords)) return 'sheet';
+    if(hasAny(docWords)) return 'doc';
+    return null;
+  }
+
+  function showCreateConfirmCardLocal(container, type, content){
+    var typeNames = { doc:'Document (.docx)', sheet:'Spreadsheet (.xlsx)', slide:'Presentation (.pptx)' };
+    var card = document.createElement('div');
+    card.style.cssText = 'background:#18181D;border:1px solid #FFB800;border-radius:12px;padding:12px;margin-top:6px';
+    var preview = content.length > 300 ? content.substring(0,300) + '\u2026' : content;
+    card.innerHTML =
+      '<div style="font-weight:600;margin-bottom:6px;color:#FFB800;font-size:13px">\ud83d\udcc4 Create ' + typeNames[type] + '?</div>' +
+      '<pre style="background:#0A0A0C;border:1px solid #1C1C22;border-radius:8px;padding:8px;font-size:11px;max-height:100px;overflow:auto;white-space:pre-wrap;color:#A8A8B3;margin-bottom:10px">' + escapeHtml(preview) + '</pre>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button data-cf="yes" style="flex:1;padding:8px;background:#FFB800;color:#1a1200;border:0;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer">Yes, create it</button>' +
+        '<button data-cf="insert" style="padding:8px 12px;background:transparent;border:1px solid #26262D;color:#F5F5F7;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer">Insert here</button>' +
+        '<button data-cf="no" style="padding:8px 12px;background:transparent;border:1px solid #26262D;color:#A8A8B3;border-radius:8px;font-size:12px;cursor:pointer">Cancel</button>' +
+      '</div>';
+    container.appendChild(card);
+    card.querySelector('[data-cf="no"]').addEventListener('click', function(){ card.remove(); });
+    card.querySelector('[data-cf="insert"]').addEventListener('click', function(){
+      card.remove();
+      insertText(content);
+    });
+    card.querySelector('[data-cf="yes"]').addEventListener('click', function(){
+      card.remove();
+      if(window.KiwaEditorAI && window.KiwaEditorAI.saveEditorSettings){
+        // We don't have access to the native createFileWithContent here directly.
+        // Instead we save the content as a pending file via a message to the home screen.
+        // Simplest path: alert the user to create it from the home screen.
+        var msg = document.createElement('div');
+        msg.style.cssText = 'font-size:12px;color:#FFB800;margin-top:6px';
+        msg.textContent = 'To create a new file, close this document and use the home screen. Or tap "Insert here" to add the content to this document.';
+        card.parentNode.appendChild(msg);
+      }
+    });
+  }
 
   console.log('Kiwa AI editor panel installed (with structure extraction)');
 

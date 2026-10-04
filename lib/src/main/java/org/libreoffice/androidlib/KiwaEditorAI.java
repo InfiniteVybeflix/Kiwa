@@ -31,6 +31,14 @@ public class KiwaEditorAI {
         return sp.getString("json", "{}");
     }
 
+    @JavascriptInterface
+    public void saveEditorSettings(final String json) {
+        try {
+            SharedPreferences sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            sp.edit().putString("json", json).apply();
+        } catch (Exception e) { /* ignore */ }
+    }
+
     /** Called from the editor panel JS when an extraction response arrives. */
     @JavascriptInterface
     public void onStructure(final String json) {
