@@ -164,7 +164,17 @@ public final class KiwaAI {
         try {
             BufferedReader r = new BufferedReader(new InputStreamReader(is, "UTF-8"));
             String line;
-            while ((line = r.readLine()) != null) sb.append(line);
+            // Use readLine() with explicit '\n' re-appending — otherwise
+            // multi-line AI responses are flattened into a single line,
+            // which breaks JSON parsing for transform responses and
+            // destroys formatting (paragraphs, code blocks, lists) in
+            // chat-display text.
+            boolean first = true;
+            while ((line = r.readLine()) != null) {
+                if (!first) sb.append('\n');
+                sb.append(line);
+                first = false;
+            }
             r.close();
         } catch (Exception e) { /* ignore */ }
         return sb.toString();

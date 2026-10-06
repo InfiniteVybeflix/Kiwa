@@ -1,0 +1,434 @@
+[
+  {
+    "id": "modern_resume",
+    "name": "Modern Resume",
+    "type": "doc",
+    "category": "CVs",
+    "asset": "templates/modern_resume.docx",
+    "description": "Clean modern layout with gold accents",
+    "preview": "linear-gradient(135deg,#3B82F6,#1E40AF)"
+  },
+  {
+    "id": "classic_resume",
+    "name": "Classic Resume",
+    "type": "doc",
+    "category": "CVs",
+    "asset": "templates/classic_resume.docx",
+    "description": "Traditional professional layout",
+    "preview": "linear-gradient(135deg,#475569,#1F2937)"
+  },
+  {
+    "id": "executive_resume",
+    "name": "Executive Resume",
+    "type": "doc",
+    "category": "CVs",
+    "asset": "templates/executive_resume.docx",
+    "description": "C-suite / board-level resume",
+    "preview": "linear-gradient(135deg,#0F172A,#1F2937)"
+  },
+  {
+    "id": "creative_resume",
+    "name": "Creative Resume",
+    "type": "doc",
+    "category": "CVs",
+    "asset": "templates/creative_resume.docx",
+    "description": "For designers and creative roles",
+    "preview": "linear-gradient(135deg,#7C3AED,#5B21B6)"
+  },
+  {
+    "id": "business_letter",
+    "name": "Business Letter",
+    "type": "doc",
+    "category": "Letters",
+    "asset": "templates/business_letter.docx",
+    "description": "Formal letter with subject line",
+    "preview": "linear-gradient(135deg,#0EA5E9,#0369A1)"
+  },
+  {
+    "id": "application_letter",
+    "name": "Application Letter",
+    "type": "doc",
+    "category": "Letters",
+    "asset": "templates/application_letter.docx",
+    "description": "Cover letter for a job application",
+    "preview": "linear-gradient(135deg,#10B981,#047857)"
+  },
+  {
+    "id": "recommendation_letter",
+    "name": "Recommendation Letter",
+    "type": "doc",
+    "category": "Letters",
+    "asset": "templates/recommendation_letter.docx",
+    "description": "Professional reference letter",
+    "preview": "linear-gradient(135deg,#6366F1,#4338CA)"
+  },
+  {
+    "id": "resignation_letter",
+    "name": "Resignation Letter",
+    "type": "doc",
+    "category": "Letters",
+    "asset": "templates/resignation_letter.docx",
+    "description": "Formal notice with handover plan",
+    "preview": "linear-gradient(135deg,#F59E0B,#B45309)"
+  },
+  {
+    "id": "offer_letter",
+    "name": "Offer Letter",
+    "type": "doc",
+    "category": "Letters",
+    "asset": "templates/offer_letter.docx",
+    "description": "Employment offer with compensation & benefits",
+    "preview": "linear-gradient(135deg,#D97706,#B45309)"
+  },
+  {
+    "id": "thank_you_letter",
+    "name": "Thank You Letter",
+    "type": "doc",
+    "category": "Letters",
+    "asset": "templates/thank_you_letter.docx",
+    "description": "Gratitude letter after a meeting or favor",
+    "preview": "linear-gradient(135deg,#EC4899,#9D174D)"
+  },
+  {
+    "id": "invoice",
+    "name": "Invoice",
+    "type": "doc",
+    "category": "Invoices",
+    "asset": "templates/invoice.docx",
+    "description": "Professional invoice with VAT line items",
+    "preview": "linear-gradient(135deg,#D97706,#B45309)"
+  },
+  {
+    "id": "quotation",
+    "name": "Quotation",
+    "type": "doc",
+    "category": "Invoices",
+    "asset": "templates/quotation.docx",
+    "description": "Quote with terms and conditions",
+    "preview": "linear-gradient(135deg,#F59E0B,#B45309)"
+  },
+  {
+    "id": "receipt",
+    "name": "Receipt",
+    "type": "doc",
+    "category": "Invoices",
+    "asset": "templates/receipt.docx",
+    "description": "Payment receipt with authorized signatory",
+    "preview": "linear-gradient(135deg,#7C3AED,#5B21B6)"
+  },
+  {
+    "id": "purchase_order",
+    "name": "Purchase Order",
+    "type": "doc",
+    "category": "Invoices",
+    "asset": "templates/purchase_order.docx",
+    "description": "PO with line items and shipping details",
+    "preview": "linear-gradient(135deg,#0EA5E9,#0369A1)"
+  },
+  {
+    "id": "meeting_minutes",
+    "name": "Meeting Minutes",
+    "type": "doc",
+    "category": "Meetings",
+    "asset": "templates/meeting_minutes.docx",
+    "description": "Agenda, decisions, action items",
+    "preview": "linear-gradient(135deg,#06B6D4,#0E7490)"
+  },
+  {
+    "id": "agenda",
+    "name": "Agenda",
+    "type": "doc",
+    "category": "Meetings",
+    "asset": "templates/agenda.docx",
+    "description": "Standup agenda with time slots",
+    "preview": "linear-gradient(135deg,#6366F1,#4338CA)"
+  },
+  {
+    "id": "business_plan",
+    "name": "Business Plan",
+    "type": "doc",
+    "category": "Plans",
+    "asset": "templates/business_plan.docx",
+    "description": "Executive summary, market, financials",
+    "preview": "linear-gradient(135deg,#EC4899,#9D174D)"
+  },
+  {
+    "id": "project_proposal",
+    "name": "Project Proposal",
+    "type": "doc",
+    "category": "Plans",
+    "asset": "templates/project_proposal.docx",
+    "description": "Background, methodology, budget, timeline",
+    "preview": "linear-gradient(135deg,#EF4444,#991B1B)"
+  },
+  {
+    "id": "project_charter",
+    "name": "Project Charter",
+    "type": "doc",
+    "category": "Plans",
+    "asset": "templates/project_charter.docx",
+    "description": "Scope, stakeholders, timeline, budget",
+    "preview": "linear-gradient(135deg,#1F2937,#0F172A)"
+  },
+  {
+    "id": "marketing_plan",
+    "name": "Marketing Plan",
+    "type": "doc",
+    "category": "Plans",
+    "asset": "templates/marketing_plan.docx",
+    "description": "Situation, objectives, channels, budget",
+    "preview": "linear-gradient(135deg,#EC4899,#BE185D)"
+  },
+  {
+    "id": "quarterly_report",
+    "name": "Quarterly Report",
+    "type": "doc",
+    "category": "Reports",
+    "asset": "templates/quarterly_report.docx",
+    "description": "Operations & performance review",
+    "preview": "linear-gradient(135deg,#14B8A6,#0F766E)"
+  },
+  {
+    "id": "swot_analysis",
+    "name": "SWOT Analysis",
+    "type": "doc",
+    "category": "Reports",
+    "asset": "templates/swot_analysis.docx",
+    "description": "Strengths, weaknesses, opportunities, threats",
+    "preview": "linear-gradient(135deg,#6366F1,#1F2937)"
+  },
+  {
+    "id": "job_description",
+    "name": "Job Description",
+    "type": "doc",
+    "category": "HR",
+    "asset": "templates/job_description.docx",
+    "description": "Role, responsibilities, requirements, comp",
+    "preview": "linear-gradient(135deg,#2563EB,#1E40AF)"
+  },
+  {
+    "id": "performance_review",
+    "name": "Performance Review",
+    "type": "doc",
+    "category": "HR",
+    "asset": "templates/performance_review.docx",
+    "description": "Quarterly review with 360 feedback",
+    "preview": "linear-gradient(135deg,#7C3AED,#5B21B6)"
+  },
+  {
+    "id": "sop",
+    "name": "Standard Operating Procedure",
+    "type": "doc",
+    "category": "HR",
+    "asset": "templates/sop.docx",
+    "description": "Procedure, scope, decision matrix, KPIs",
+    "preview": "linear-gradient(135deg,#475569,#1F2937)"
+  },
+  {
+    "id": "lesson_plan",
+    "name": "Lesson Plan",
+    "type": "doc",
+    "category": "School",
+    "asset": "templates/lesson_plan.docx",
+    "description": "Objectives, materials, structure, assessment",
+    "preview": "linear-gradient(135deg,#059669,#047857)"
+  },
+  {
+    "id": "report_card",
+    "name": "Report Card",
+    "type": "doc",
+    "category": "School",
+    "asset": "templates/report_card.docx",
+    "description": "Term grades with teacher and head comments",
+    "preview": "linear-gradient(135deg,#2563EB,#1E40AF)"
+  },
+  {
+    "id": "weekly_planner",
+    "name": "Weekly Planner",
+    "type": "doc",
+    "category": "Personal",
+    "asset": "templates/weekly_planner.docx",
+    "description": "Priorities, daily plan, habits tracker",
+    "preview": "linear-gradient(135deg,#7C3AED,#5B21B6)"
+  },
+  {
+    "id": "certificate",
+    "name": "Certificate",
+    "type": "doc",
+    "category": "Personal",
+    "asset": "templates/certificate.docx",
+    "description": "Certificate of achievement",
+    "preview": "linear-gradient(135deg,#FFB800,#FFC933)"
+  },
+  {
+    "id": "press_release",
+    "name": "Press Release",
+    "type": "doc",
+    "category": "Marketing",
+    "asset": "templates/press_release.docx",
+    "description": "FOR IMMEDIATE RELEASE format with quotes",
+    "preview": "linear-gradient(135deg,#DC2626,#991B1B)"
+  },
+  {
+    "id": "newsletter",
+    "name": "Newsletter",
+    "type": "doc",
+    "category": "Marketing",
+    "asset": "templates/newsletter.docx",
+    "description": "Weekly internal newsletter with sections",
+    "preview": "linear-gradient(135deg,#D97706,#92400E)"
+  },
+  {
+    "id": "nda",
+    "name": "Non-Disclosure Agreement",
+    "type": "doc",
+    "category": "Legal",
+    "asset": "templates/nda.docx",
+    "description": "Mutual NDA — two party",
+    "preview": "linear-gradient(135deg,#0F172A,#1F2937)"
+  },
+  {
+    "id": "service_agreement",
+    "name": "Service Agreement",
+    "type": "doc",
+    "category": "Legal",
+    "asset": "templates/service_agreement.docx",
+    "description": "Services, fees, IP, termination",
+    "preview": "linear-gradient(135deg,#1F2937,#0F172A)"
+  },
+  {
+    "id": "story_outline",
+    "name": "Story Outline",
+    "type": "doc",
+    "category": "Creative",
+    "asset": "templates/story_outline.docx",
+    "description": "Logline, characters, three-act, chapter table",
+    "preview": "linear-gradient(135deg,#7C3AED,#5B21B6)"
+  },
+  {
+    "id": "budget",
+    "name": "Monthly Budget",
+    "type": "sheet",
+    "category": "Personal",
+    "asset": "templates/budget.xlsx",
+    "description": "Income, expenses, savings tracker",
+    "preview": "linear-gradient(135deg,#10B981,#047857)"
+  },
+  {
+    "id": "invoice_tracker",
+    "name": "Invoice Tracker",
+    "type": "sheet",
+    "category": "Invoices",
+    "asset": "templates/invoice_tracker.xlsx",
+    "description": "Track invoice status with formulas + validation",
+    "preview": "linear-gradient(135deg,#D97706,#B45309)"
+  },
+  {
+    "id": "project_plan",
+    "name": "Project Plan",
+    "type": "sheet",
+    "category": "Plans",
+    "asset": "templates/project_plan.xlsx",
+    "description": "Task list with dates, days, status",
+    "preview": "linear-gradient(135deg,#6366F1,#4338CA)"
+  },
+  {
+    "id": "income_statement",
+    "name": "Income Statement",
+    "type": "sheet",
+    "category": "Financial",
+    "asset": "templates/income_statement.xlsx",
+    "description": "P&L with current vs prior year + % change",
+    "preview": "linear-gradient(135deg,#059669,#047857)"
+  },
+  {
+    "id": "balance_sheet",
+    "name": "Balance Sheet",
+    "type": "sheet",
+    "category": "Financial",
+    "asset": "templates/balance_sheet.xlsx",
+    "description": "Assets, liabilities, equity with formulas",
+    "preview": "linear-gradient(135deg,#2563EB,#1E40AF)"
+  },
+  {
+    "id": "okr_tracker",
+    "name": "OKR Tracker",
+    "type": "sheet",
+    "category": "Plans",
+    "asset": "templates/okr_tracker.xlsx",
+    "description": "Objectives, key results, % done formulas",
+    "preview": "linear-gradient(135deg,#D97706,#B45309)"
+  },
+  {
+    "id": "kpi_dashboard",
+    "name": "KPI Dashboard",
+    "type": "sheet",
+    "category": "Reports",
+    "asset": "templates/kpi_dashboard.xlsx",
+    "description": "KPIs with Q2/Q3 target/actual + status formula",
+    "preview": "linear-gradient(135deg,#14B8A6,#0F766E)"
+  },
+  {
+    "id": "expense_report",
+    "name": "Expense Report",
+    "type": "sheet",
+    "category": "Invoices",
+    "asset": "templates/expense_report.xlsx",
+    "description": "Itemized expenses with category summary",
+    "preview": "linear-gradient(135deg,#EC4899,#9D174D)"
+  },
+  {
+    "id": "untitled_sheet",
+    "name": "Blank Spreadsheet",
+    "type": "sheet",
+    "category": "Blank",
+    "asset": "templates/untitled.xlsx",
+    "description": "Start from scratch",
+    "preview": "linear-gradient(135deg,#9CA3AF,#4B5563)"
+  },
+  {
+    "id": "pitch_deck",
+    "name": "Pitch Deck",
+    "type": "slide",
+    "category": "Presentations",
+    "asset": "templates/pitch_deck.pptx",
+    "description": "8-slide investor pitch template",
+    "preview": "linear-gradient(135deg,#FFB800,#FFC933)"
+  },
+  {
+    "id": "training_deck",
+    "name": "Training Deck",
+    "type": "slide",
+    "category": "Presentations",
+    "asset": "templates/training_deck.pptx",
+    "description": "7-slide staff training with practice scenarios",
+    "preview": "linear-gradient(135deg,#2563EB,#1E40AF)"
+  },
+  {
+    "id": "status_update_deck",
+    "name": "Status Update Deck",
+    "type": "slide",
+    "category": "Presentations",
+    "asset": "templates/status_update_deck.pptx",
+    "description": "Weekly status with done/in-progress/blocked",
+    "preview": "linear-gradient(135deg,#059669,#047857)"
+  },
+  {
+    "id": "untitled_slide",
+    "name": "Blank Presentation",
+    "type": "slide",
+    "category": "Blank",
+    "asset": "templates/untitled.pptx",
+    "description": "Start from scratch",
+    "preview": "linear-gradient(135deg,#9CA3AF,#4B5563)"
+  },
+  {
+    "id": "untitled_doc",
+    "name": "Blank Document",
+    "type": "doc",
+    "category": "Blank",
+    "asset": "templates/untitled.docx",
+    "description": "Start from scratch",
+    "preview": "linear-gradient(135deg,#9CA3AF,#4B5563)"
+  }
+]

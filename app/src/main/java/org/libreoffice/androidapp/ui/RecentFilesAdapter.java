@@ -8,9 +8,18 @@
 package org.libreoffice.androidapp.ui;
 
 import android.app.Activity;
+import android.content.Context;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
+import android.os.ParcelFileDescriptor;
 import android.provider.OpenableColumns;
+import android.util.LruCache;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,6 +28,10 @@ import android.widget.TextView;
 
 import org.libreoffice.androidapp.R;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -34,6 +47,9 @@ class RecentFilesAdapter extends RecyclerView.Adapter<RecentFilesAdapter.ViewHol
 
     private LibreOfficeUIActivity mActivity;
     private ArrayList<RecentFile> recentFiles;
+    // Process-wide thumbnail cache so we don't re-render the same PDF
+    // every time the user navigates between grids.
+    private static final LruCache<String, Bitmap> sThumbCache = new LruCache<>(16 * 1024 * 1024);
 
     RecentFilesAdapter(LibreOfficeUIActivity activity, List<Uri> recentUris) {
         this.mActivity = activity;
@@ -140,8 +156,9 @@ class RecentFilesAdapter extends RecyclerView.Adapter<RecentFilesAdapter.ViewHol
         holder.filenameView.setText(filename);
 
         int compoundDrawableInt = 0;
+        int type = FileUtilities.getType(filename);
 
-        switch (FileUtilities.getType(filename)) {
+        switch (type) {
             case FileUtilities.DOC:
                 compoundDrawableInt = R.drawable.writer;
                 break;
@@ -159,8 +176,43 @@ class RecentFilesAdapter extends RecyclerView.Adapter<RecentFilesAdapter.ViewHol
                 break;
         }
 
-        if (compoundDrawableInt != 0)
+        // For PDFs, try to render a real first-page thumbnail so the
+        // user can recognize documents visually instead of seeing the
+        // generic PDF icon for everything. We cache it in a static LRU
+        // cache keyed by the file URI so it survives across rebinds.
+        // The render runs on a background thread so the UI does not jank.
+        boolean renderedThumb = false;
+        if (type == FileUtilities.PDF) {
+            final String cacheKey = file.uri.toString();
+            Bitmap cached = sThumbCache.get(cacheKey);
+            if (cached != null) {
+                holder.imageView.setImageBitmap(cached);
+                holder.imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                renderedThumb = true;
+            } else {
+                // Async render — fall back to the static icon while we work.
+                final ImageView iv = holder.imageView;
+                final Context ctx = mActivity;
+                final View.OnClickListener orig = clickListener;
+                iv.setTag(cacheKey);  // prevent stale bindings
+                new Thread(() -> {
+                    Bitmap bmp = renderPdfThumbnail(ctx, file.uri);
+                    if (bmp != null) {
+                        sThumbCache.put(cacheKey, bmp);
+                        iv.post(() -> {
+                            if (cacheKey.equals(iv.getTag())) {
+                                iv.setImageBitmap(bmp);
+                                iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                            }
+                        });
+                    }
+                }).start();
+            }
+        }
+        if (!renderedThumb && compoundDrawableInt != 0) {
             holder.imageView.setImageDrawable(ContextCompat.getDrawable(mActivity, compoundDrawableInt));
+            holder.imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        }
 
         // Date and Size field only exist when we are displaying items in a list.
         if (mActivity.isViewModeList()) {
@@ -226,6 +278,36 @@ class RecentFilesAdapter extends RecyclerView.Adapter<RecentFilesAdapter.ViewHol
             this.uri = uri;
             this.filename = filename;
             this.fileLength = fileLength;
+        }
+    }
+
+    /** Render the first page of a PDF (given as a content:// or file:// URI)
+     *  to a 256x340 Bitmap suitable for a thumbnail tile. Returns null on
+     *  any failure. Caller is responsible for running this off the UI thread. */
+    private static Bitmap renderPdfThumbnail(Context ctx, Uri uri) {
+        ParcelFileDescriptor fd = null;
+        PdfRenderer renderer = null;
+        try {
+            // For content:// URIs we use openFileDescriptor; for file:// we
+            // can also use openFileDescriptor (it handles both).
+            fd = ctx.getContentResolver().openFileDescriptor(uri, "r");
+            if (fd == null) return null;
+            renderer = new PdfRenderer(fd);
+            if (renderer.getPageCount() <= 0) return null;
+            PdfRenderer.Page page = renderer.openPage(0);
+            int targetW = 256;
+            int targetH = (int) Math.round(targetW * (page.getHeight() / (double) Math.max(1, page.getWidth())));
+            if (targetH > 480) targetH = 480;
+            Bitmap bmp = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888);
+            bmp.eraseColor(Color.WHITE);
+            page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+            page.close();
+            return bmp;
+        } catch (Throwable t) {
+            return null;
+        } finally {
+            try { if (renderer != null) renderer.close(); } catch (Throwable ignored) {}
+            try { if (fd != null) fd.close(); } catch (Throwable ignored) {}
         }
     }
 }

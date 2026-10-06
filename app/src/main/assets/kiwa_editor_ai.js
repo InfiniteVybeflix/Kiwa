@@ -136,8 +136,6 @@
     } catch(e) { return ''; }
   }
 
-  // sendAI replaced by sendAIWithContext
-
   function escapeUnoString(s) {
     return String(s)
       .replace(/\\/g, '\\\\')
@@ -155,6 +153,22 @@
         window.socket.sendMessage(msg);
       } else if (window.COOMessageHandler && window.COOMessageHandler.postMobileMessage) {
         window.COOMessageHandler.postMobileMessage(msg);
+      } else if (window.app && window.app.socket && window.app.socket.sendMessage) {
+        window.app.socket.sendMessage(msg);
+      }
+    } catch(e) {}
+  }
+
+  function replaceSelection(text) {
+    // For "replace selection" the user must have something selected.
+    // We delete the selection first, then insert the new text.
+    if (!text) return;
+    try {
+      var s = window.app && window.app.socket ? window.app.socket : window.socket;
+      if (s && s.sendMessage) {
+        s.sendMessage('uno .uno:Delete');
+        // Small delay so the delete lands before the insert.
+        setTimeout(function(){ insertText(text); }, 60);
       }
     } catch(e) {}
   }
@@ -186,48 +200,6 @@
     sendAIWithContext();
   }
 
-  function handleSendOld() {
-    var text = input.value.trim();
-    if (!text) return;
-    input.value = '';
-    input.style.height = 'auto';
-    addMessage('user', escapeHtml(text));
-    history.push({role: 'user', content: text});
-    var thinking = addMessage('ai', '<div style="display:flex;align-items:center;gap:8px"><span class="kp-typing"><span></span><span></span><span></span></span><span style="font-size:12px;color:#6B6B76">Kiwa is thinking\u2026</span></div>');
-
-    sendAI(text).then(function(r) {
-      var bubble = thinking.querySelector('.kp-msg-b');
-      if (r && r.ok && r.text) {
-        bubble.innerHTML = formatText(r.text);
-        history.push({role: 'assistant', content: r.text});
-
-        var actions = document.createElement('div');
-        actions.className = 'kp-actions';
-        actions.innerHTML =
-          '<button class="kp-action primary" data-insert>Insert at cursor</button>' +
-          '<button class="kp-action" data-replace>Replace selection</button>' +
-          '<button class="kp-action" data-copy>Copy</button>';
-        thinking.appendChild(actions);
-
-        actions.querySelector('[data-insert]').addEventListener('click', function() {
-          insertText(r.text);
-          closePanel();
-        });
-        actions.querySelector('[data-replace]').addEventListener('click', function() {
-          insertText(r.text);
-          closePanel();
-        });
-        actions.querySelector('[data-copy]').addEventListener('click', function() {
-          try { navigator.clipboard.writeText(r.text); } catch(e){}
-        });
-      } else {
-        bubble.innerHTML = '<span style="color:#EF4444">' + escapeHtml((r && r.error) || 'Unknown error') + '</span>';
-        history.pop();
-      }
-      chat.scrollTop = chat.scrollHeight;
-    });
-  }
-
   function openPanel() {
     // reset drag-injected styles so the panel starts at its proper place
     panel.style.top = '';
@@ -238,17 +210,13 @@
     overlay.classList.add('open');
     setTimeout(function() {
       input.focus();
-      if(window.KiwaEditorAdjustKeyboard) window.KiwaEditorAdjustKeyboard();
+      adjustKeyboard();
     }, 300);
-    setTimeout(function(){
-      if(window.KiwaEditorAdjustKeyboard) window.KiwaEditorAdjustKeyboard();
-    }, 700);
+    setTimeout(adjustKeyboard, 700);
   }
   function closePanel() {
     panel.classList.remove('open');
     overlay.classList.remove('open');
-    // Reset any inline styles injected by dragging so the panel returns
-    // to its normal bottom-anchored layout next time it opens.
     panel.style.top = '';
     panel.style.bottom = '';
     panel.style.transform = '';
@@ -316,149 +284,84 @@
     }
   } catch(e) {}
 
-  // ============ DOCUMENT STRUCTURE EXTRACTION (4C.1) ============
-  var rawLog = [];
-  var extractionResolvers = [];
+  // ============ DOCUMENT TEXT EXTRACTION ============
+  // The robust strategy: trigger `uno .uno:SelectAll` + `uno .uno:Copy`,
+  // wait for the clipboard file to be written by LOActivity.populateClipboard(),
+  // then read it via KiwaEditorAI.getDocumentText(). This works for ALL
+  // document types (text, PDFs, presentations, spreadsheets) because it
+  // uses the LibreOffice engine's own copy pipeline, not DOM scraping.
 
-  window.KiwaOnStructure = function(jsonString){
-    var pending = extractionResolvers.splice(0);
-    for (var i = 0; i < pending.length; i++) pending[i](jsonString);
-  };
-
-  window.KiwaOnRawMessage = function(text){
-    rawLog.push({t: Date.now(), s: text});
-    if (rawLog.length > 200) rawLog.shift();
-  };
-
-  window.KiwaOnError = function(msg){
-    var pending = extractionResolvers.splice(0);
-    for (var i = 0; i < pending.length; i++) pending[i](null);
-  };
-
-  function installSocketWatcher(){
-    var s = window.socket;
-    if (!s && window.app && window.app.socket && window.app.socket.socket) {
-      s = window.app.socket.socket;
-    }
-    if (!s) {
-      setTimeout(installSocketWatcher, 500);
-      return;
-    }
-    if (s.__kiwaWrapped) return;
-    s.__kiwaWrapped = true;
-
-    var orig = s.onmessage;
-    s.onmessage = function(evt){
-      try {
-        if (evt && typeof evt.data === 'string') {
-          var d = evt.data;
-          var prefixes = [
-            'extractdocumentstructure:',
-            'extractdocumentstructure ',
-            'extracteddocumentstructure:',
-            'documentstructure:',
-            'commandresult: extractdocumentstructure',
-            'commandresult:extractdocumentstructure',
-            'commandresult:extract-document-structure',
-            'commandresult: extract-document-structure'
-          ];
-          var matched = false;
-          for (var i = 0; i < prefixes.length; i++) {
-            if (d.indexOf(prefixes[i]) === 0) {
-              var payload = d.substring(prefixes[i].length).trim();
-              matched = true;
-              if (window.KiwaOnStructure) window.KiwaOnStructure(payload);
-              break;
-            }
-          }
-          if (!matched && d.length > 20 && (d.indexOf('"DocStructure"') >= 0 || d.indexOf('"Structure"') >= 0)) {
-            matched = true;
-            var startBrace = d.indexOf('{');
-            var payload2 = startBrace >= 0 ? d.substring(startBrace) : d;
-            if (window.KiwaOnStructure) window.KiwaOnStructure(payload2);
-          }
-          if (!matched && d.length > 40) {
-            if (window.KiwaEditorAI && window.KiwaEditorAI.onRawMessage) {
-              try { window.KiwaEditorAI.onRawMessage(d.substring(0, 400)); } catch(e){}
-            }
-          }
-        }
-      } catch(e) {}
-      if (orig) return orig.call(this, evt);
-    };
+  function getSocket() {
+    if (window.socket && window.socket.sendMessage) return window.socket;
+    if (window.app && window.app.socket && window.app.socket.sendMessage) return window.app.socket;
+    return null;
   }
-  installSocketWatcher();
+
+  function waitForClipboardFile(maxWaitMs) {
+    return new Promise(function(resolve){
+      var waited = 0;
+      var step = 80;
+      function tick() {
+        if (window.KiwaEditorAI && window.KiwaEditorAI.clipboardFileExists && window.KiwaEditorAI.clipboardFileExists()) {
+          resolve(true);
+          return;
+        }
+        waited += step;
+        if (waited >= maxWaitMs) { resolve(false); return; }
+        setTimeout(tick, step);
+      }
+      tick();
+    });
+  }
 
   function extractStructure(){
-    // Try the direct DOM reader first (fast). If it returns nothing,
-    // fall back to the SelectAll strategy which works even when the editor
-    // is rendering tiles instead of DOM text.
     return new Promise(function(resolve){
+      // Try the direct DOM reader first (fast). If it returns nothing,
+      // fall back to the SelectAll+Copy strategy which works on all docs.
       var direct = null;
       try { direct = readDocumentFromDom(); } catch(e){}
-      if (direct) { resolve(direct); return; }
+      if (direct && direct.length) { resolve(direct); return; }
       extractViaSelectAll().then(function(viaSel){
-        if (viaSel) { resolve(viaSel); return; }
+        if (viaSel && viaSel.length) { resolve(viaSel); return; }
         resolve(null);
       });
     });
   }
 
   function readDocumentFromDom(){
-    // Collabora renders tiles, not DOM text. To get the document content we
-    // use the editor's own APIs. Several fallbacks in case one is unavailable.
-
-    // Strategy 1: app.map.getDocText() — some builds expose this directly
+    // For some document types the editor exposes a getSelectionText or
+    // getDocText API. Try these first.
     try {
       if (window.app && window.app.map && typeof window.app.map.getDocText === 'function') {
         var t = window.app.map.getDocText();
         if (t && t.length) return buildStructure(t);
       }
     } catch(e) {}
-
-    // Strategy 2: getSelectionText on the map object
     try {
       if (window.app && window.app.map && typeof window.app.map.getSelectionText === 'function') {
         var t2 = window.app.map.getSelectionText();
-        if (t2 && t2.length) return buildStructure(t2);
+        if (t2 && t2.length > 2) return buildStructure(t2);
       }
     } catch(e) {}
-
-    // Strategy 3: global selection
+    // If the user has selected text, use it
     try {
       var s = window.getSelection();
       if (s && s.toString() && s.toString().length > 2) {
         return buildStructure(s.toString());
       }
     } catch(e) {}
-
-    // Strategy 4: read the raw text nodes (fallback — may be empty if tiles only)
-    try {
-      var selectors = ['.text-run','[class*="text-run"]','.Paragraph','.paragraph'];
-      var parts = [];
-      for (var i = 0; i < selectors.length; i++) {
-        var nodes = document.querySelectorAll(selectors[i]);
-        for (var n = 0; n < nodes.length; n++) {
-          var txt = (nodes[n].innerText || nodes[n].textContent || '').trim();
-          if (txt) parts.push(txt);
-        }
-        if (parts.length) break;
-      }
-      if (parts.length) return buildStructure(parts.join('\\n'));
-    } catch(e) {}
-
-    // Strategy 5: leaflet container text
-    try {
-      var area = document.querySelector('.leaflet-container') || document.body;
-      var all = (area.innerText || '').split('\\n').map(function(x){ return x.trim(); }).filter(function(x){ return x.length > 0; });
-      if (all.length > 3) return buildStructure(all.join('\\n'));
-    } catch(e) {}
-
-    return null;
+    // Otherwise return empty — the SelectAll+Copy path is the real extractor.
+    return '';
   }
 
   function buildStructure(raw){
     if (!raw) return null;
+    // CRITICAL: split on real newlines (\n), not on the two-character
+    // sequence "\n". The previous implementation joined with the string
+    // '\\n' (literal backslash-n) and then split on /\r?\n/ which doesn't
+    // match — producing one giant "line" instead of a properly structured
+    // document. That was the root cause of the "Could not read document"
+    // failure: the AI received an unreadable blob of text.
     var lines = raw.split(/\r?\n/).map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; });
     if (!lines.length) return null;
     var out = {
@@ -475,49 +378,96 @@
     return JSON.stringify(out);
   }
 
-  // Add a special "select all then extract" strategy when the user taps Read document.
-  // It briefly selects everything, reads, then deselects.
+  // Robust extraction strategy: SelectAll → Copy → wait for the clipboard
+  // file → read it via the native bridge. This works on PDFs and all
+  // other document types because it uses LibreOffice's own copy pipeline.
   function extractViaSelectAll(){
     return new Promise(function(resolve){
-      var s = window.app && window.app.socket;
-      if (!s || !s.sendMessage) { resolve(null); return; }
-      // Select all
+      var s = getSocket();
+      if (!s) { resolve(null); return; }
+      // Remember the current selection so we can restore it afterwards.
+      var hadSelection = false;
       try {
-        s.sendMessage('uno .uno:SelectAll');
-      } catch(e){ resolve(null); return; }
-      // Give it a moment to select
-      setTimeout(function(){
-        // Try to grab selection via a couple of entry points
-        var text = '';
-        try {
-          if (window.app && window.app.map && typeof window.app.map.getSelectionText === 'function') {
-            text = window.app.map.getSelectionText() || '';
-          }
-        } catch(e){}
-        if (!text) {
-          try {
-            var sel = window.getSelection();
-            if (sel) text = sel.toString() || '';
-          } catch(e){}
+        if (window.app && window.app.map && typeof window.app.map.getSelectionText === 'function') {
+          var cur = window.app.map.getSelectionText();
+          if (cur && cur.length > 0) hadSelection = true;
         }
-        // Collapse the selection back to just the cursor
-        try { s.sendMessage('uno .uno:GoToStartOfDoc'); } catch(e){}
-        if (text && text.length > 1) resolve(buildStructure(text));
-        else resolve(null);
-      }, 500);
+      } catch(e) {}
+
+      try { s.sendMessage('uno .uno:SelectAll'); } catch(e) { resolve(null); return; }
+      // Give the engine a moment to actually select everything.
+      setTimeout(function(){
+        try { s.sendMessage('uno .uno:Copy'); } catch(e) { resolve(null); return; }
+        // Wait for the clipboard file to be written. The native side
+        // writes it synchronously in populateClipboard(), but the
+        // .uno:Copy message round-trip takes a few hundred ms.
+        waitForClipboardFile(2500).then(function(ok){
+          // Restore the user's original selection (or collapse it).
+          try {
+            if (hadSelection) {
+              s.sendMessage('uno .uno:Escape');
+            } else {
+              s.sendMessage('uno .uno:GoToStartOfDoc');
+              s.sendMessage('uno .uno:Escape');
+            }
+          } catch(e) {}
+          if (!ok) { resolve(null); return; }
+          var text = '';
+          try {
+            if (window.KiwaEditorAI && window.KiwaEditorAI.getDocumentText) {
+              text = window.KiwaEditorAI.getDocumentText() || '';
+            }
+          } catch(e) { text = ''; }
+          if (text && text.length > 1) resolve(buildStructure(text));
+          else resolve(null);
+        });
+      }, 350);
     });
   }
 
   function readDocumentAndDisplay(){
-    var bubble = addMessage('ai', 'Reading document structure...');
+    var bubble = addMessage('ai', 'Reading document content...');
     var bubbleBody = bubble.querySelector('.kp-msg-b');
+    bubbleBody.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><span class="kp-typing"><span></span><span></span><span></span></span><span style="font-size:12px;color:#6B6B76">Reading...</span></div>';
     extractStructure().then(function(json){
       if (!json) {
-        bubbleBody.innerHTML = '<span style="color:#F59E0B">Could not read document. The server may have rejected the request.</span>' +
-          '<div style="font-size:11px;color:#6B6B76;margin-top:6px">Try again, or open a different document. If this persists, the extraction command format may differ from this Collabora build.</div>';
+        bubbleBody.innerHTML = '<span style="color:#F59E0B">Could not extract document text.</span>' +
+          '<div style="font-size:11px;color:#6B6B76;margin-top:6px">The document may be empty, password-protected, or use a format Kiwa cannot extract. Try selecting text manually and ask AI to work with the selection.</div>';
         return;
       }
-      bubbleBody.innerHTML = summarizeStructure(json);
+      // Show a brief summary and offer to send to AI
+      var obj = null;
+      try { obj = JSON.parse(json); } catch(e) {}
+      var lineCount = obj && obj.DocStructure ? obj.DocStructure.LineCount : 0;
+      var preview = '';
+      try {
+        var lines = obj.DocStructure.Lines;
+        var keys = Object.keys(lines);
+        for (var i = 0; i < Math.min(keys.length, 4); i++) {
+          preview += escapeHtml(lines[keys[i]].content || '') + '<br>';
+        }
+        if (keys.length > 4) preview += '<span style="color:#6B6B76">… ' + (keys.length - 4) + ' more lines</span>';
+      } catch(e) {}
+      bubbleBody.innerHTML =
+        '<div style="font-weight:600;color:#10B981">✓ Read ' + lineCount + ' lines</div>' +
+        '<div style="font-size:12px;margin-top:6px;color:#A8A8B3;line-height:1.5">' + preview + '</div>' +
+        '<div class="kp-actions" style="margin-top:8px">' +
+          '<button class="kp-action primary" data-action="summarize">Summarize</button>' +
+          '<button class="kp-action" data-action="rewrite">Rewrite</button>' +
+          '<button class="kp-action" data-action="ask">Ask AI</button>' +
+        '</div>';
+      bubbleBody.querySelector('[data-action="summarize"]').addEventListener('click', function(){
+        input.value = 'Summarize the document';
+        sendAIWithContext();
+      });
+      bubbleBody.querySelector('[data-action="rewrite"]').addEventListener('click', function(){
+        input.value = 'Rewrite the document to be more professional and concise';
+        sendAIWithContext();
+      });
+      bubbleBody.querySelector('[data-action="ask"]').addEventListener('click', function(){
+        input.focus();
+        input.value = '';
+      });
     });
   }
 
@@ -554,7 +504,7 @@
     }
   }
 
-  // ============ AI-DRIVEN EDITING (4C.2 + 4C.3) ============
+  // ============ AI-DRIVEN EDITING ============
   var structureCache = { data: null, ts: 0 };
 
   function getStructure(maxAgeMs){
@@ -580,49 +530,30 @@
   var EDIT_SYSTEM_PROMPT = [
     'You are Kiwa AI, editing a document in a mobile office suite.',
     '',
-    'You will receive the current document structure as JSON, then the user\'s request.',
+    'You will receive the current document content as a JSON structure with lines, then the user\'s request.',
     '',
     'If the user is asking a question or chatting, respond with plain text.',
     '',
-    'If the user wants to CHANGE the document, respond with ONLY a JSON object:',
-    '{"Transforms": {"<selector>": {"<property>": "<value>"}}}',
-    '',
-    'Selectors (from the structure you receive):',
-    '- ContentControls.ByIndex.<n>',
-    '- ContentControls.ByTag.<tag>',
-    '- ContentControls.ByAlias.<alias>',
-    '- Headings.ByIndex.<n>',
-    '- Headings.ByTitle.<title>',
-    '',
-    'Common properties: content, alias, text, tag.',
+    'If the user wants to CHANGE the document, you can either:',
+    '1) Output a NEW full version of the document text (the user can replace the whole document with it),',
+    '   OR output a partial replacement starting with the heading or first changed line.',
+    '2) Reply with text that explains the change AND includes the new text in plain prose.',
     '',
     'Examples:',
-    'User: "add a name at number 5"',
-    'You: {"Transforms": {"ContentControls.ByTag.5": {"content": "John Doe"}}}',
-    '',
-    'User: "change the title to Introduction"',
-    'You: {"Transforms": {"Headings.ByIndex.0": {"text": "Introduction"}}}',
+    'User: "rewrite the first paragraph to be more formal"',
+    'You: (output the rewritten paragraph as plain text — the user will insert it)',
     '',
     'User: "what is in this document?"',
     'You: "The document contains 3 headings and a form with 10 fields..."',
     '',
-    'If the user\'s request cannot be matched to a real item, respond:',
-    '{"error": "I could not find X. Available items are: ..."}',
-    '',
-    'Output ONLY the JSON object when it is a transform. No markdown, no commentary.'
+    'Be concise. When you produce replacement text, output ONLY the replacement text.',
+    'Do not wrap replacement text in markdown code fences unless you really mean code.'
   ].join('\n');
 
   function detectTransform(text){
-    if (!text) return null;
-    var trimmed = String(text).trim();
-    // strip markdown fences if the AI added them
-    trimmed = trimmed.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-    if (trimmed.charAt(0) !== '{') return null;
-    try {
-      var obj = JSON.parse(trimmed);
-      if (obj && obj.Transforms) return obj;
-      if (obj && obj.error) return { __error: obj.error };
-    } catch(e) {}
+    // We no longer rely on a Transforms JSON envelope from the AI —
+    // the AI simply produces replacement text, and the user decides
+    // whether to insert or replace.
     return null;
   }
 
@@ -641,98 +572,31 @@
     return lines.join('');
   }
 
-  function renderTransformPreview(msgEl, transform){
-    var raw = JSON.stringify(transform, null, 2);
-    var html = '' +
-      '<div class="kp-preview-title" style="font-weight:600;margin-bottom:8px">\uD83C\uDFAF Proposed edit</div>' +
-      '<div class="kp-preview-body" style="margin-bottom:10px">' + summarizeTransform(transform) + '</div>' +
-      '<div class="kp-actions">' +
-        '<button class="kp-action" data-preview="raw">Show JSON</button>' +
-        '<button class="kp-action primary" data-preview="apply">Apply</button>' +
-        '<button class="kp-action" data-preview="cancel">Cancel</button>' +
-      '</div>' +
-      '<pre data-preview="json" style="display:none;font-size:10px;background:#0A0A0C;padding:8px;border-radius:6px;margin-top:8px;max-height:180px;overflow:auto">' +
-        escapeHtml(raw) +
-      '</pre>';
+  function renderResponseWithActions(msgEl, text){
     var bubble = msgEl.querySelector('.kp-msg-b');
-    bubble.innerHTML = html;
-
-    var rawBtn = msgEl.querySelector('[data-preview="raw"]');
-    var applyBtn = msgEl.querySelector('[data-preview="apply"]');
-    var cancelBtn = msgEl.querySelector('[data-preview="cancel"]');
-    var pre = msgEl.querySelector('[data-preview="json"]');
-
-    if (rawBtn) rawBtn.addEventListener('click', function(){
-      pre.style.display = (pre.style.display === 'none') ? 'block' : 'none';
+    bubble.innerHTML = formatText(text);
+    var actions = document.createElement('div');
+    actions.className = 'kp-actions';
+    actions.style.marginTop = '8px';
+    actions.innerHTML =
+      '<button class="kp-action primary" data-insert>Insert at cursor</button>' +
+      '<button class="kp-action" data-replace>Replace selection</button>' +
+      '<button class="kp-action" data-copy>Copy</button>';
+    bubble.appendChild(actions);
+    actions.querySelector('[data-insert]').addEventListener('click', function(){
+      insertText(text);
+      closePanel();
     });
-    if (cancelBtn) cancelBtn.addEventListener('click', function(){
-      bubble.innerHTML = '<span style="color:#6B6B76">Cancelled.</span>';
+    actions.querySelector('[data-replace]').addEventListener('click', function(){
+      replaceSelection(text);
+      closePanel();
     });
-    if (applyBtn) applyBtn.addEventListener('click', function(){
-      applyBtn.disabled = true;
-      applyBtn.textContent = 'Applying...';
-      applyTransform(transform).then(function(result){
-        if (result.ok) {
-          bubble.innerHTML = '<div style="color:#10B981;font-weight:600">\u2713 Applied</div><div style="font-size:12px;color:#A8A8B3;margin-top:4px">' + escapeHtml(result.note || '') + '</div>';
-        } else {
-          bubble.innerHTML = '<div style="color:#EF4444;font-weight:600">Apply failed</div><div style="font-size:12px;margin-top:4px">' + escapeHtml(result.error || 'Unknown error') + '</div>';
-        }
-      });
-    });
-  }
-
-  function applyTransform(transform){
-    return new Promise(function(resolve){
-      var sent = false;
-      try {
-        if (window.app && window.app.socket && window.app.socket.sendMessage) {
-          var encoded = encodeURIComponent(JSON.stringify(transform));
-          window.app.socket.sendMessage('transformdocumentstructure url=interactive transform=' + encoded);
-          sent = true;
-        }
-      } catch(e){
-        resolve({ok: false, error: 'Send failed: ' + e.message});
-        return;
-      }
-      if (!sent) {
-        resolve({ok: false, error: 'Socket unavailable'});
-        return;
-      }
-      // invalidate cache so re-verification gets fresh data
-      invalidateStructure();
-      // Give the server time to apply, then re-extract
-      setTimeout(function(){
-        extractStructure().then(function(newStruct){
-          if (!newStruct) {
-            resolve({ok: true, note: 'Applied. Re-extraction unavailable — check the document.'});
-            return;
-          }
-          structureCache.data = newStruct;
-          structureCache.ts = Date.now();
-          // Naive check: does any value from the transform appear in the new structure?
-          var expected = [];
-          var keys = Object.keys(transform.Transforms || {});
-          for (var i = 0; i < keys.length; i++){
-            var ops = transform.Transforms[keys[i]];
-            var props = Object.keys(ops);
-            for (var j = 0; j < props.length; j++){
-              var v = ops[props[j]];
-              if (typeof v === 'string' && v.length > 1) expected.push(v);
-            }
-          }
-          var found = expected.some(function(v){ return newStruct.indexOf(v) >= 0; });
-          if (found) {
-            resolve({ok: true, note: 'Verified — the change is in the document.'});
-          } else {
-            resolve({ok: true, note: 'Applied, but verification was inconclusive. Check the document.'});
-          }
-        });
-      }, 1200);
+    actions.querySelector('[data-copy]').addEventListener('click', function(){
+      try { navigator.clipboard.writeText(text); } catch(e){}
     });
   }
 
   // Override sendAI: fetch structure, use edit-mode prompt, parse response
-  var _origSendAI = null;
   function sendAIWithContext(){
     var inp = document.getElementById('kpInput');
     var text = (inp.value || '').trim();
@@ -745,14 +609,18 @@
     var thinking = addMessage('ai', '<div style="display:flex;align-items:center;gap:8px"><span class="kp-typing"><span></span><span></span><span></span></span><span style="font-size:12px;color:#6B6B76">Kiwa is thinking\u2026</span></div>');
 
     var settings = window.KiwaEditorSettings || {};
+    var selection = getSelectionText();
 
     var chain = getStructure(30000);
 
     chain.then(function(structureJson){
       var systemPrompt = EDIT_SYSTEM_PROMPT;
-      if (structureJson) {
+      if (selection && selection.length > 1) {
+        systemPrompt += '\n\nThe user has selected this text in the document:\n"""' + selection.substring(0, 4000) + '"""';
+        systemPrompt += '\nFocus on the selected text when responding.';
+      } else if (structureJson) {
         var trimmed = structureJson.length > 18000 ? structureJson.substring(0, 18000) + '...[truncated]' : structureJson;
-        systemPrompt += '\n\nCurrent document structure:\n' + trimmed;
+        systemPrompt += '\n\nCurrent document content (JSON of lines):\n' + trimmed;
       }
       var msgs = history.slice(-6);
       var payload = {
@@ -781,91 +649,48 @@
         chat.scrollTop = chat.scrollHeight;
         return;
       }
-      var transform = detectTransform(r.text);
-      if (transform) {
-        if (transform.__error) {
-          bubble.innerHTML = '<div style="color:#F59E0B">' + escapeHtml(transform.__error) + '</div>';
-          history.push({role: 'assistant', content: r.text});
-        } else {
-          renderTransformPreview(thinking, transform);
-          history.push({role: 'assistant', content: r.text});
-        }
-      } else {
-        bubble.innerHTML = formatText(r.text);
-        history.push({role: 'assistant', content: r.text});
-        // If the user's request implies document creation, offer it
-        if(detectCreateIntentLocal(text) && window.KiwaEditorAI && window.KiwaEditorAI.saveEditorSettings){
-          showCreateConfirmCardLocal(thinking, detectCreateIntentLocal(text), r.text);
-        }
-      }
+      history.push({role: 'assistant', content: r.text});
+      persistEditorChat();
+      renderResponseWithActions(thinking, r.text);
       chat.scrollTop = chat.scrollHeight;
     });
   }
 
-  // ============ KEYBOARD HANDLING ============
+  // ============ KEYBOARD HANDLING (single source of truth) ============
   // When the soft keyboard is open, lift the panel above it so the user
   // can see what they're typing. Uses visualViewport which reflects the
   // actual visible area, unlike window.innerHeight.
-  (function(){
-    function adjust(){
-      if(!window.visualViewport) return;
-      var vv = window.visualViewport;
-      var keyboardHeight = window.innerHeight - vv.height - vv.offsetTop;
-      if(keyboardHeight > 80){
-        panel.style.bottom = keyboardHeight + 'px';
-        panel.style.maxHeight = Math.max(180, vv.height - 40) + 'px';
-        if(input === document.activeElement){
-          setTimeout(function(){ chat.scrollTop = chat.scrollHeight; }, 50);
-        }
-      } else {
-        panel.style.bottom = '0px';
-        panel.style.maxHeight = '72vh';
+  var panelEl = panel;       // alias for clarity
+  var inputEl = input;
+  var chatEl = chat;
+
+  function adjustKeyboard(){
+    if(!window.visualViewport) return;
+    var vv = window.visualViewport;
+    var kbHeight = window.innerHeight - vv.height - vv.offsetTop;
+    if(kbHeight > 80){
+      panelEl.style.bottom = kbHeight + 'px';
+      panelEl.style.maxHeight = Math.max(180, vv.height - 40) + 'px';
+      if(inputEl === document.activeElement){
+        setTimeout(function(){ chatEl.scrollTop = chatEl.scrollHeight; }, 50);
       }
+    } else {
+      panelEl.style.bottom = '0px';
+      panelEl.style.maxHeight = '72vh';
     }
-    if(window.visualViewport){
-      window.visualViewport.addEventListener('resize', adjust);
-      window.visualViewport.addEventListener('scroll', adjust);
-    }
-    input.addEventListener('focus', function(){ setTimeout(adjust, 100); });
-    input.addEventListener('blur', function(){ setTimeout(adjust, 100); });
-  })();
+  }
+  window.KiwaEditorAdjustKeyboard = adjustKeyboard;
 
-  // ============ SOFT KEYBOARD LIFT ============
-  // When the on-screen keyboard is open, visualViewport shrinks. Use that
-  // to lift the panel so the input stays visible while typing.
-  (function(){
-    var panelEl = document.getElementById('kiwa-panel');
-    var inputEl = document.getElementById('kpInput');
-    var chatEl = document.getElementById('kpChat');
-    if(!panelEl || !inputEl) return;
-
-    function adjust(){
-      if(!window.visualViewport) return;
-      var vv = window.visualViewport;
-      var kbHeight = window.innerHeight - vv.height - vv.offsetTop;
-      if(kbHeight > 80){
-        panelEl.style.bottom = kbHeight + 'px';
-        panelEl.style.maxHeight = Math.max(180, vv.height - 40) + 'px';
-        if(chatEl) chatEl.scrollTop = chatEl.scrollHeight;
-      } else {
-        panelEl.style.bottom = '0px';
-        panelEl.style.maxHeight = '72vh';
-      }
-    }
-
-    if(window.visualViewport){
-      window.visualViewport.addEventListener('resize', adjust);
-      window.visualViewport.addEventListener('scroll', adjust);
-    }
-    inputEl.addEventListener('focus', function(){
-      setTimeout(adjust, 120);
-      setTimeout(adjust, 300);
-      setTimeout(adjust, 600);
-    });
-    inputEl.addEventListener('blur', function(){ setTimeout(adjust, 120); });
-    // expose so openPanel can force an adjustment
-    window.KiwaEditorAdjustKeyboard = adjust;
-  })();
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', adjustKeyboard);
+    window.visualViewport.addEventListener('scroll', adjustKeyboard);
+  }
+  inputEl.addEventListener('focus', function(){
+    setTimeout(adjustKeyboard, 100);
+    setTimeout(adjustKeyboard, 300);
+    setTimeout(adjustKeyboard, 600);
+  });
+  inputEl.addEventListener('blur', function(){ setTimeout(adjustKeyboard, 120); });
 
   // ============ VIEWPORT META (keyboard resize) ============
   // Cool.html has its own viewport meta. We replace it with one that
@@ -910,16 +735,10 @@
   function persistEditorChat(){
     try {
       var s = window.KiwaEditorSettings || {};
-      if (!s.editorChat) s.editorChat = [];
       s.editorChat = history.slice(-30);
       if (window.KiwaEditorAI && window.KiwaEditorAI.saveEditorSettings) {
         window.KiwaEditorAI.saveEditorSettings(JSON.stringify(s));
-      } else {
-        try {
-          var existing = window.KiwaEditorAI && window.KiwaEditorAI.getSettings ? JSON.parse(window.KiwaEditorAI.getSettings()) : {};
-          existing.editorChat = s.editorChat;
-          // no save method yet — fall through
-        } catch(e){}
+        window.KiwaEditorSettings = s;
       }
     } catch(e){}
   }
@@ -933,7 +752,6 @@
           window.KiwaEditorSettings = s;
           if (s.editorChat && s.editorChat.length) {
             history = s.editorChat.slice(-30);
-            // restore visible messages
             for (var i = 0; i < history.length; i++) {
               var m = history[i];
               if (m.role === 'user') addMessage('user', escapeHtml(m.content));
@@ -953,55 +771,6 @@
     return el;
   };
 
-  // ============ CREATE INTENT (editor) ============
-  function detectCreateIntentLocal(text){
-    if(!text) return null;
-    var t = text.toLowerCase();
-    var docWords = ['document','doc','letter','report','essay','article','memo','note'];
-    var sheetWords = ['spreadsheet','sheet','table','budget','invoice','tracker'];
-    var slideWords = ['presentation','slides','deck','powerpoint','pitch'];
-    var createWords = ['create','make','write','generate','draft','produce','new'];
-    function hasAny(list){ for(var i=0;i<list.length;i++){ if(t.indexOf(list[i])>=0) return true; } return false; }
-    if(!hasAny(createWords)) return null;
-    if(hasAny(slideWords)) return 'slide';
-    if(hasAny(sheetWords)) return 'sheet';
-    if(hasAny(docWords)) return 'doc';
-    return null;
-  }
-
-  function showCreateConfirmCardLocal(container, type, content){
-    var typeNames = { doc:'Document (.docx)', sheet:'Spreadsheet (.xlsx)', slide:'Presentation (.pptx)' };
-    var card = document.createElement('div');
-    card.style.cssText = 'background:#18181D;border:1px solid #FFB800;border-radius:12px;padding:12px;margin-top:6px';
-    var preview = content.length > 300 ? content.substring(0,300) + '\u2026' : content;
-    card.innerHTML =
-      '<div style="font-weight:600;margin-bottom:6px;color:#FFB800;font-size:13px">\ud83d\udcc4 Create ' + typeNames[type] + '?</div>' +
-      '<pre style="background:#0A0A0C;border:1px solid #1C1C22;border-radius:8px;padding:8px;font-size:11px;max-height:100px;overflow:auto;white-space:pre-wrap;color:#A8A8B3;margin-bottom:10px">' + escapeHtml(preview) + '</pre>' +
-      '<div style="display:flex;gap:8px">' +
-        '<button data-cf="yes" style="flex:1;padding:8px;background:#FFB800;color:#1a1200;border:0;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer">Yes, create it</button>' +
-        '<button data-cf="insert" style="padding:8px 12px;background:transparent;border:1px solid #26262D;color:#F5F5F7;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer">Insert here</button>' +
-        '<button data-cf="no" style="padding:8px 12px;background:transparent;border:1px solid #26262D;color:#A8A8B3;border-radius:8px;font-size:12px;cursor:pointer">Cancel</button>' +
-      '</div>';
-    container.appendChild(card);
-    card.querySelector('[data-cf="no"]').addEventListener('click', function(){ card.remove(); });
-    card.querySelector('[data-cf="insert"]').addEventListener('click', function(){
-      card.remove();
-      insertText(content);
-    });
-    card.querySelector('[data-cf="yes"]').addEventListener('click', function(){
-      card.remove();
-      if(window.KiwaEditorAI && window.KiwaEditorAI.saveEditorSettings){
-        // We don't have access to the native createFileWithContent here directly.
-        // Instead we save the content as a pending file via a message to the home screen.
-        // Simplest path: alert the user to create it from the home screen.
-        var msg = document.createElement('div');
-        msg.style.cssText = 'font-size:12px;color:#FFB800;margin-top:6px';
-        msg.textContent = 'To create a new file, close this document and use the home screen. Or tap "Insert here" to add the content to this document.';
-        card.parentNode.appendChild(msg);
-      }
-    });
-  }
-
-  console.log('Kiwa AI editor panel installed (with structure extraction)');
+  console.log('Kiwa AI editor panel installed (with native-backed document extraction)');
 
 })();

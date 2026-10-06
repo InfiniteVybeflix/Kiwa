@@ -193,12 +193,13 @@ tasks.register('copyBrandTheme', Copy) {
 }
 
 tasks.register('copyDocTemplates', Copy) {
-    from "${rootProject.getRootDir()}/templates/untitled.odp",
-            "${rootProject.getRootDir()}/templates/untitled.ods",
-            "${rootProject.getRootDir()}/templates/untitled.odt",
-            "${rootProject.getRootDir()}/templates/untitled.pptx",
-            "${rootProject.getRootDir()}/templates/untitled.xlsx",
-            "${rootProject.getRootDir()}/templates/untitled.docx"
+    // Bundle every .docx/.xlsx/.pptx/.odt/.ods/.odp file from the project's
+    // templates/ directory into the app's assets/templates/ folder. Using
+    // a wildcard (instead of an explicit file list) means new templates
+    // added to the repo are picked up automatically — the previous hard-
+    // coded list silently dropped anything not listed.
+    from "${rootProject.getRootDir()}/templates"
+    include "*.docx", "*.xlsx", "*.pptx", "*.odt", "*.ods", "*.odp"
     into "src/main/assets/templates"
 }
 
@@ -293,9 +294,9 @@ ReferenceOOoMajorMinor=4.1
 }
 
 clean.doFirst {
-	delete "src/main/assets"
-	delete "src/debug/assets"
-	delete "src/release/assets"
+        delete "src/main/assets"
+        delete "src/debug/assets"
+        delete "src/release/assets"
 }
 
 // creating the UI stuff is cheap, don't bother only applying it for the flavor..
@@ -326,11 +327,11 @@ tasks.register('generateCoolReleaseAssets') {
 }
 
 afterEvaluate {
-	if (!file("${coBrandingDir}").exists()) {
-		copyBrandTheme.enabled = false
-	}
-	generateDebugAssets.dependsOn copyDocTemplates, generateCoolDebugAssets
-	generateReleaseAssets.dependsOn copyDocTemplates, generateCoolReleaseAssets
+        if (!file("${coBrandingDir}").exists()) {
+                copyBrandTheme.enabled = false
+        }
+        generateDebugAssets.dependsOn copyDocTemplates, generateCoolDebugAssets
+        generateReleaseAssets.dependsOn copyDocTemplates, generateCoolReleaseAssets
 
     // These tasks only exist under some cases (not in Android Studio)...
     // ...so use tasks.named so they don't fail if they are never registered...

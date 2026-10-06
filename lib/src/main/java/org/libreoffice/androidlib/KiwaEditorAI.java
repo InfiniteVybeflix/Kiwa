@@ -7,8 +7,11 @@ import android.webkit.WebView;
 
 import org.json.JSONObject;
 
+import java.io.File;
+
 public class KiwaEditorAI {
     private static final String PREFS = "kiwa_prefs";
+    private static final String CLIPBOARD_FILE = "LibreofficeClipboardFile.data";
     private final Context context;
     private final WebView webView;
 
@@ -37,6 +40,50 @@ public class KiwaEditorAI {
             SharedPreferences sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
             sp.edit().putString("json", json).apply();
         } catch (Exception e) { /* ignore */ }
+    }
+
+    /**
+     * Synchronous call from JS to retrieve the current document text.
+     * The JS side triggers `uno .uno:SelectAll` followed by `uno .uno:Copy`,
+     * waits a moment for the native clipboard population to complete, then
+     * calls this method. We read the clipboard file written by
+     * LOActivity.populateClipboard() and return its text content.
+     *
+     * This is far more reliable than scraping the DOM (Collabora renders
+     * to tiles, not text nodes) or calling app.map.getSelectionText()
+     * (which is not always available on the mobile build).
+     *
+     * Returns the text content (UTF-8) or an empty string if the file is
+     * missing or cannot be parsed. Never throws.
+     */
+    @JavascriptInterface
+    public String getDocumentText() {
+        try {
+            File clipboardFile = new File(context.getCacheDir(), CLIPBOARD_FILE);
+            if (!clipboardFile.exists()) return "";
+            org.libreoffice.androidlib.lok.LokClipboardData data =
+                    org.libreoffice.androidlib.lok.LokClipboardData.createFromFile(clipboardFile);
+            if (data == null) return "";
+            String text = data.getText();
+            return text == null ? "" : text;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * Check whether the clipboard file exists. JS uses this to know if the
+     * `uno .uno:Copy` step has finished writing the file before calling
+     * getDocumentText().
+     */
+    @JavascriptInterface
+    public boolean clipboardFileExists() {
+        try {
+            File clipboardFile = new File(context.getCacheDir(), CLIPBOARD_FILE);
+            return clipboardFile.exists() && clipboardFile.length() > 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** Called from the editor panel JS when an extraction response arrives. */

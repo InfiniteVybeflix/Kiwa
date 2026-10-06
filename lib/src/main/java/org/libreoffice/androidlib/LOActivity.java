@@ -71,6 +71,7 @@ import java.io.BufferedWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
@@ -82,6 +83,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
@@ -115,11 +117,16 @@ public class LOActivity extends AppCompatActivity {
     private static final String KEY_DOCUMENT_URI = "documentUri";
     private static final String KEY_IS_EDITABLE = "isEditable";
     private static final String KEY_INTENT_URI = "intentUri";
+    private static final String KEY_INTENT_TYPE = "intentType";
+    private static final String KEY_PENDING_AI = "pendingAIContent";
     private static final String CLIPBOARD_FILE_PATH = "LibreofficeClipboardFile.data";
     private static final String CLIPBOARD_COOL_SIGNATURE = "cool-clip-magic-4a22437e49a8-";
     public static final String RECENT_DOCUMENTS_KEY = "RECENT_DOCUMENTS_LIST";
     private static String USER_NAME_KEY = "USER_NAME";
     public static final String NIGHT_MODE_KEY = "NIGHT_MODE";
+
+    private static final int AI_INSERT_MAX_RETRIES = 20;  // ~10s total
+    private static final long AI_INSERT_RETRY_DELAY_MS = 500;
 
     private File mTempFile = null;
 
@@ -128,6 +135,18 @@ public class LOActivity extends AppCompatActivity {
 
     /// True once the user has been asked for access to all files for the document being opened.
     private boolean mAllFilesAccessAsked = false;
+
+    /// True once a save has been triggered for the current document. Used to detect
+    /// dirty state and to know whether we need to save again on background/exit.
+    private volatile boolean mDirty = false;
+
+    /// Tracks the original content URI (for content:// intents) so we can re-copy
+    /// the temp file if the system clears our cache while we're in the background.
+    private volatile Uri mSourceContentUri = null;
+    private volatile String mSourceIntentType = null;
+
+    /// Counts how many times we have tried to insert pending AI content.
+    private final AtomicInteger mAIInsertRetries = new AtomicInteger(0);
 
     private int providerId;
     private Activity mActivity;
@@ -351,6 +370,9 @@ public class LOActivity extends AppCompatActivity {
         this.savedInstanceState = savedInstanceState;
         try {
             pendingAIContent = getIntent().getStringExtra("kiwa_ai_content");
+            if (pendingAIContent == null && savedInstanceState != null) {
+                pendingAIContent = savedInstanceState.getString(KEY_PENDING_AI);
+            }
         } catch (Exception ignored) {}
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         sPrefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
@@ -546,20 +568,30 @@ public class LOActivity extends AppCompatActivity {
 
             WebSettings webSettings = mWebView.getSettings();
             webSettings.setJavaScriptEnabled(true);
-            // PDF and view-only documents: lock zoom to avoid the tile parsing
-            // bug that fires on fast pinch-zoom in the mobile renderer.
-            String mime = getMimeType();
-            if (mime != null && (mime.equals("application/pdf") || !isDocEditable)) {
-                webSettings.setSupportZoom(false);
-                webSettings.setBuiltInZoomControls(false);
-                webSettings.setDisplayZoomControls(false);
+            webSettings.setDomStorageEnabled(true);
+            webSettings.setLoadWithOverviewMode(true);
+            webSettings.setUseWideViewPort(true);
+            // Allow pinch-zoom on the WebView for ALL documents; the COOL
+            // renderer has its own JS-based zoom, but locking the WebView
+            // zoom prevents accessibility users from enlarging text. The
+            // "invalid tile command" issue is not caused by zoom itself —
+            // it comes from rapid tile re-requests during fast pinch-zoom,
+            // which is handled by kiwa_tile_throttle.js (injected after
+            // load) and by allowing the COOL renderer to manage its own
+            // zoom state.
+            webSettings.setSupportZoom(true);
+            webSettings.setBuiltInZoomControls(false);  // do not show +/- buttons
+            webSettings.setDisplayZoomControls(false);
+            // Record the source URI so we can re-copy the temp file if the
+            // system clears our cache while we are in the background.
+            if (ContentResolver.SCHEME_CONTENT.equals(getIntent().getData() != null ? getIntent().getData().getScheme() : null)) {
+                mSourceContentUri = getIntent().getData();
+                try { mSourceIntentType = getIntent().getType(); } catch (Exception ignored) { mSourceIntentType = null; }
             }
             mWebView.addJavascriptInterface(this, "COOLMessageHandler");
             mWebView.addJavascriptInterface(new KiwaEditorAI(getApplicationContext(), mWebView), "KiwaEditorAI");
 
             webSettings.setDomStorageEnabled(true);
-
-            // allow debugging (when building the debug version); see details in
             // https://developers.google.com/web/tools/chrome-devtools/remote-debugging/webviews
             boolean isChromeDebugEnabled = sPrefs.getBoolean("ENABLE_CHROME_DEBUGGING", false);
             if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0 || isChromeDebugEnabled) {
@@ -798,13 +830,21 @@ public class LOActivity extends AppCompatActivity {
     @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putString(KEY_INTENT_URI, getIntent().getData().toString());
+        try {
+            outState.putString(KEY_INTENT_URI, getIntent().getData().toString());
+        } catch (Exception ignored) {}
         outState.putInt(KEY_PROVIDER_ID, providerId);
         if (documentUri != null) {
             outState.putString(KEY_DOCUMENT_URI, documentUri.toString());
         }
         //If this activity was opened via contentUri
         outState.putBoolean(KEY_IS_EDITABLE, isDocEditable);
+        // Preserve the AI content pending insertion so that, if the
+        // activity is recreated after a configuration change or process
+        // death, we can still inject it once the document reloads.
+        if (pendingAIContent != null && !pendingAIContent.isEmpty()) {
+            outState.putString(KEY_PENDING_AI, pendingAIContent);
+        }
     }
 
     @Override
@@ -896,8 +936,19 @@ public class LOActivity extends AppCompatActivity {
 
     /** Check that we have created a temp file, and if yes, copy it back to the content: URI. */
     private void copyTempBackToIntent() {
-        if (!isDocEditable || mTempFile == null || getIntent().getData() == null || !getIntent().getData().getScheme().equals(ContentResolver.SCHEME_CONTENT))
+        if (!isDocEditable || getIntent().getData() == null || !getIntent().getData().getScheme().equals(ContentResolver.SCHEME_CONTENT))
             return;
+        // If the temp file went missing (e.g. system cleared the cache while
+        // we were in the background), we cannot save — and we must NOT try to
+        // open a null/empty stream on the content URI, because that would
+        // either crash or — worse — overwrite the original with 0 bytes.
+        if (mTempFile == null || !mTempFile.exists()) {
+            Log.e(TAG, "copyTempBackToIntent: temp file missing, refusing to save");
+            runOnUiThread(() -> Toast.makeText(this,
+                    "Document could not be saved — the temp file was lost. Re-open the document to continue.",
+                    Toast.LENGTH_LONG).show());
+            return;
+        }
 
         if (mResolvedFile != null) {
             copyTempBackToFile();
@@ -1016,53 +1067,111 @@ public class LOActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         Log.i(TAG, "onResume..");
+        // If the system cleared our cache while we were in the background,
+        // the temp file we copied at onCreate may have been deleted. In that
+        // case, re-copy it from the original content URI so the user can
+        // continue editing. This is one of the root causes of
+        // "This document cannot be saved" — without the temp file, the
+        // save callback has nowhere to write to.
+        if (mSourceContentUri != null && mTempFile != null && !mTempFile.exists()) {
+            Log.w(TAG, "Temp file missing on resume — re-copying from source URI");
+            if (!copyFileToTemp()) {
+                Log.e(TAG, "Failed to re-copy temp file on resume; document may be unloadable");
+                Toast.makeText(this, R.string.failed_to_load_file, Toast.LENGTH_LONG).show();
+            }
+        }
     }
 
     @Override
     protected void onPause() {
-        // A Save similar to an autosave
-        if (documentLoaded)
-            postMobileMessageNative("save dontTerminateEdit=1 dontSaveIfUnmodified=1");
-
+        // A Save similar to an autosave — but only if we actually have a
+        // document loaded and a temp file to save from. Skipping the save
+        // when documentLoaded is false is correct (we'd crash the native
+        // side); but skipping it when mTempFile is null would crash
+        // copyTempBackToIntent() in a different way. Guard both.
+        if (documentLoaded && mTempFile != null && mTempFile.exists()) {
+            try {
+                postMobileMessageNative("save dontTerminateEdit=1 dontSaveIfUnmodified=1");
+                mDirty = true;
+            } catch (Exception e) {
+                Log.e(TAG, "onPause: save failed: " + e.getMessage());
+            }
+        }
         super.onPause();
         Log.d(TAG, "onPause() - hinting to save, we might need to return to the doc");
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // When the activity is fully stopped (not just paused — e.g.
+        // user pressed Home), make sure the document content is flushed
+        // to disk so the user's work is safe even if the system kills
+        // the process. This is the Android lifecycle equivalent of an
+        // autosave checkpoint.
+        if (documentLoaded && mTempFile != null && mTempFile.exists()) {
+            try {
+                postMobileMessageNative("save dontTerminateEdit=1 dontSaveIfUnmodified=1");
+            } catch (Exception e) {
+                Log.e(TAG, "onStop: save failed: " + e.getMessage());
+            }
+        }
     }
 
     /** Injects the Kiwa AI panel into the Collabora editor WebView. */
     private void injectKiwaAIPanel() {
         if (mWebView == null) return;
+        // Inject the tile-throttle script first so the editor is stable
+        // before the AI panel is overlaid on top.
+        injectTileThrottle();
         try {
+            // Use a ByteArrayOutputStream to read the asset — `is.available()`
+            // returns 0 for compressed assets, so the previous buffer
+            // sizing was unreliable and would silently truncate the script.
             java.io.InputStream is = getAssets().open("kiwa_editor_ai.js");
-            byte[] buf = new byte[is.available()];
-            int read = 0;
-            while (read < buf.length) {
-                int r = is.read(buf, read, buf.length - read);
-                if (r < 0) break;
-                read += r;
-            }
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) > 0) baos.write(buf, 0, n);
             is.close();
-            String js = new String(buf, 0, read, "UTF-8");
+            String js = baos.toString("UTF-8");
             mWebView.evaluateJavascript("(function(){" + js + "\n})();", null);
-            Log.i(TAG, "Kiwa AI panel injected");
+            Log.i(TAG, "Kiwa AI panel injected (" + baos.size() + " bytes)");
         } catch (Exception e) {
             Log.e(TAG, "injectKiwaAIPanel failed: " + e.getMessage());
         }
     }
 
     /** If a piece of AI-generated content was attached to the launch intent,
-     *  insert it into the document via Uno once the editor is ready. */
+     *  insert it into the document via Uno once the editor is ready.
+     *  Uses a bounded retry counter instead of unbounded recursion so we
+     *  don't pile up exponential postDelayed calls if the document never loads. */
     private void insertPendingAIContent() {
         if (pendingAIContent == null || pendingAIContent.isEmpty()) return;
+        if (mAIInsertRetries.get() >= AI_INSERT_MAX_RETRIES) {
+            Log.w(TAG, "insertPendingAIContent: giving up after " + mAIInsertRetries.get() + " retries");
+            pendingAIContent = null;
+            mAIInsertRetries.set(0);
+            // Remove the intent extra so a later recreate doesn't re-insert.
+            try { getIntent().removeExtra("kiwa_ai_content"); } catch (Exception ignored) {}
+            return;
+        }
         final String content = pendingAIContent;
-        pendingAIContent = null;
+        mAIInsertRetries.incrementAndGet();
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             try {
                 if (!documentLoaded) {
-                    Log.w(TAG, "insertPendingAIContent: document not yet loaded, retrying");
-                    pendingAIContent = content;
+                    // Retry — but with the bounded counter, so we cannot
+                    // accumulate exponential postDelayed calls.
                     insertPendingAIContent();
                     return;
                 }
+                pendingAIContent = null;
+                mAIInsertRetries.set(0);
+                // Clear the intent extra so a future recreate does NOT
+                // re-insert the same content (which would duplicate it
+                // every time the activity is rebuilt by the system).
+                try { getIntent().removeExtra("kiwa_ai_content"); } catch (Exception ignored) {}
                 String escaped = content
                         .replace("\\", "\\\\")
                         .replace("\"", "\\\"")
@@ -1074,7 +1183,7 @@ public class LOActivity extends AppCompatActivity {
             } catch (Exception e) {
                 Log.e(TAG, "insertPendingAIContent failed: " + e.getMessage());
             }
-        }, 2500);
+        }, AI_INSERT_RETRY_DELAY_MS);
     }
 
     @Override
@@ -1337,8 +1446,17 @@ public class LOActivity extends AppCompatActivity {
         createCOOLWSD(dataDir, cacheDir, apkFile, assetManager, urlToLoad, uiMode, userName);
 
         // trigger the load of the document
+        // URL-encode the file_path so documents with spaces or special characters
+        // in the path do not break the cool.html query parsing — a very common
+        // cause of the "invalid tile command" error.
+        String encodedPath;
+        try {
+            encodedPath = URLEncoder.encode(urlToLoad, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            encodedPath = urlToLoad;
+        }
         String finalUrlToLoad = "file:///android_asset/dist/cool.html?file_path=" +
-                urlToLoad + "&closebutton=1";
+                encodedPath + "&closebutton=1";
 
         // set the language
         String language = getResources().getConfiguration().locale.toLanguageTag();
@@ -1381,6 +1499,26 @@ public class LOActivity extends AppCompatActivity {
         documentLoaded = true;
 
         loadDocumentMillis = android.os.SystemClock.uptimeMillis();
+    }
+
+    /** Injects JS that throttles rapid tile requests during pinch-zoom.
+     *  Called from injectKiwaAIPanel() (which runs after the COOL UI finishes loading),
+     *  so we don't need to replace the WebViewClient and risk breaking the MobileSocket. */
+    private void injectTileThrottle() {
+        if (mWebView == null) return;
+        try {
+            java.io.InputStream is = getAssets().open("kiwa_tile_throttle.js");
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = is.read(buf)) > 0) baos.write(buf, 0, n);
+            is.close();
+            String js = baos.toString("UTF-8");
+            mWebView.evaluateJavascript("(function(){" + js + "\n})();", null);
+            Log.i(TAG, "Kiwa tile throttle injected");
+        } catch (IOException e) {
+            Log.w(TAG, "kiwa_tile_throttle.js not found in assets, skipping: " + e.getMessage());
+        }
     }
 
     private boolean isDarkMode() {
@@ -1426,7 +1564,19 @@ public class LOActivity extends AppCompatActivity {
     public void postMobileMessage(String message) {
         Log.d(TAG, "postMobileMessage: " + message);
 
-        String[] messageAndParameterArray= message.split(" ", 2); // the command and the rest (that can potentially contain spaces too)
+        // Guard against single-token messages (no space-separated parameter)
+        // — e.g. "BYE", "PRINT", "DIM_SCREEN". Otherwise split(" ", 2)
+        // returns a 1-element array and accessing [1] throws AIOOBE.
+        String[] messageAndParameterArray;
+        int spaceIdx = message == null ? -1 : message.indexOf(' ');
+        if (spaceIdx < 0) {
+            messageAndParameterArray = new String[]{message == null ? "" : message, ""};
+        } else {
+            messageAndParameterArray = new String[]{
+                message.substring(0, spaceIdx),
+                message.substring(spaceIdx + 1)
+            };
+        }
 
         if (beforeMessageFromWebView(messageAndParameterArray)) {
             postMobileMessageNative(message);
@@ -1566,7 +1716,15 @@ public class LOActivity extends AppCompatActivity {
      * return true to pass the message to the native part or false to block the message
      */
     private boolean beforeMessageFromWebView(String[] messageAndParam) {
-        switch (messageAndParam[0]) {
+        // Defensive: never assume messageAndParam has length 2. The native side
+        // and JS may send single-token messages; we already normalize in
+        // postMobileMessage, but postMobileMessageNative can still deliver
+        // raw strings here from the C++ side.
+        if (messageAndParam == null || messageAndParam.length == 0)
+            return true;
+        String cmd = messageAndParam[0];
+        String arg = messageAndParam.length > 1 ? messageAndParam[1] : "";
+        switch (cmd) {
             case "BYE":
                 finishWithProgress();
                 return false;
@@ -1580,20 +1738,18 @@ public class LOActivity extends AppCompatActivity {
                 return false;
             case "SAVE":
                 copyTempBackToIntent();
-                sendBroadcast(messageAndParam[0], messageAndParam[1]);
+                sendBroadcast(cmd, arg);
+                mDirty = false;
                 return false;
             case "downloadas":
-                initiateSaveAs(messageAndParam[1]);
+                initiateSaveAs(arg);
                 return false;
             case "exportfile":
-                initiateExportFile(messageAndParam[1]);
+                initiateExportFile(arg);
                 return false;
             case "uno":
-                switch (messageAndParam[1]) {
-                    case ".uno:Paste":
-                        return performPaste();
-                    default:
-                        break;
+                if (".uno:Paste".equals(arg)) {
+                    return performPaste();
                 }
                 break;
             case "DIM_SCREEN": {
@@ -1615,7 +1771,7 @@ public class LOActivity extends AppCompatActivity {
                 return false;
             }
             case "MOBILEWIZARD": {
-                switch (messageAndParam[1]) {
+                switch (arg) {
                     case "show":
                         mMobileWizardVisible = true;
                         break;
@@ -1626,13 +1782,20 @@ public class LOActivity extends AppCompatActivity {
                 return false;
             }
             case "HYPERLINK": {
-                Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.setData(Uri.parse(messageAndParam[1]));
-                startActivity(intent);
+                if (arg.isEmpty()) return false;
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    intent.setData(Uri.parse(arg));
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Log.w(TAG, "Failed to open hyperlink: " + arg + " — " + e.getMessage());
+                    Toast.makeText(this, "Cannot open link", Toast.LENGTH_SHORT).show();
+                }
                 return false;
             }
             case "EDITMODE": {
-                switch (messageAndParam[1]) {
+                switch (arg) {
                     case "on":
                         mIsEditModeActive = true;
                         // prompt for file conversion
@@ -1709,13 +1872,30 @@ public class LOActivity extends AppCompatActivity {
         String filename = null;
         try {
             cursor = getContentResolver().query(getIntent().getData(), null, null, null, null);
-            if (cursor != null && cursor.moveToFirst())
-                filename = cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME));
+            if (cursor != null && cursor.moveToFirst()) {
+                int col = cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME);
+                if (!cursor.isNull(col)) filename = cursor.getString(col);
+            }
         } catch (Exception e) {
             return null;
+        } finally {
+            if (cursor != null)
+                cursor.close();
         }
-        if (!withExtension)
-            filename = filename.substring(0, filename.lastIndexOf("."));
+        if (filename == null || filename.isEmpty()) {
+            // Fallback: derive the name from the URI's last path segment.
+            Uri data = getIntent().getData();
+            if (data != null) {
+                String last = data.getLastPathSegment();
+                if (last != null && !last.isEmpty()) filename = last;
+            }
+        }
+        if (filename == null || filename.isEmpty())
+            return "untitled";
+        if (!withExtension) {
+            int dot = filename.lastIndexOf('.');
+            if (dot > 0) filename = filename.substring(0, dot);
+        }
         return filename;
     }
 
@@ -1880,12 +2060,15 @@ public class LOActivity extends AppCompatActivity {
     }
 
     private void afterMessageFromWebView(String[] messageAndParameterArray) {
+        if (messageAndParameterArray == null || messageAndParameterArray.length < 2)
+            return;
         switch (messageAndParameterArray[0]) {
             case "uno":
                 switch (messageAndParameterArray[1]) {
                     case ".uno:Copy":
                     case ".uno:Cut":
                         populateClipboard();
+                        mDirty = true;
                         break;
                     default:
                         break;

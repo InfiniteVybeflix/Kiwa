@@ -6,10 +6,19 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Rect;
+import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.ParcelFileDescriptor;
 import android.provider.Settings;
+import android.util.LruCache;
 import android.webkit.JavascriptInterface;
 import android.widget.Toast;
 
@@ -17,12 +26,16 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -32,6 +45,9 @@ public class KiwaNativeBridge {
     private final KiwaHomeActivity host;
     private final Activity activity;
     private static final String PREFS = "kiwa_prefs";
+    // Maximum size for the in-memory thumbnail LRU cache. Roughly ~32 entries at 256x256 ARGB_8888.
+    private static final int THUMB_CACHE_BYTES = 32 * 1024 * 1024;
+    private final LruCache<String, String> thumbCache = new LruCache<>(THUMB_CACHE_BYTES);
 
     public KiwaNativeBridge(KiwaHomeActivity host) {
         this.host = host;
@@ -124,10 +140,65 @@ public class KiwaNativeBridge {
                 o.put("time", humanTime(f.lastModified()));
                 o.put("star", false);
                 o.put("ai", false);
+                // Real first-page thumbnail for PDFs (built-in PdfRenderer),
+                // empty for other types — JS uses a styled colored card
+                // with the file-type icon for those. We cache the data URL
+                // so we don't re-render every time the home screen reloads.
+                if ("pdf".equals(typeForExt(ext))) {
+                    String thumb = thumbCache.get(f.getAbsolutePath());
+                    if (thumb == null) {
+                        thumb = renderPdfThumbnail(f);
+                        if (thumb != null) thumbCache.put(f.getAbsolutePath(), thumb);
+                    }
+                    o.put("thumb", thumb != null ? thumb : "");
+                } else {
+                    o.put("thumb", "");
+                }
                 arr.put(o);
             } catch (Exception e) { /* skip */ }
         }
         return arr.toString();
+    }
+
+    /** Render the first page of a PDF to a 320x430 (A4 portrait ratio) PNG
+     *  data URL. Returns null on any failure. Runs on the calling thread. */
+    private String renderPdfThumbnail(File pdfFile) {
+        if (pdfFile == null || !pdfFile.exists()) return null;
+        ParcelFileDescriptor fd = null;
+        PdfRenderer renderer = null;
+        try {
+            fd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY);
+            renderer = new PdfRenderer(fd);
+            if (renderer.getPageCount() <= 0) {
+                renderer.close();
+                fd.close();
+                return null;
+            }
+            PdfRenderer.Page page = renderer.openPage(0);
+            int targetW = 320;
+            int targetH = (int) Math.round(targetW * (page.getHeight() / (double) Math.max(1, page.getWidth())));
+            // Cap height to keep memory bounded.
+            if (targetH > 600) targetH = 600;
+            Bitmap bmp = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888);
+            bmp.eraseColor(Color.WHITE);
+            Canvas canvas = new Canvas(bmp);
+            Paint p = new Paint();
+            p.setAntiAlias(true);
+            p.setFilterBitmap(true);
+            page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+            page.close();
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            bmp.compress(Bitmap.CompressFormat.JPEG, 80, baos);
+            bmp.recycle();
+            byte[] bytes = baos.toByteArray();
+            String b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP);
+            return "data:image/jpeg;base64," + b64;
+        } catch (Throwable t) {
+            return null;
+        } finally {
+            try { if (renderer != null) renderer.close(); } catch (Throwable ignored) {}
+            try { if (fd != null) fd.close(); } catch (Throwable ignored) {}
+        }
     }
 
     private void scanRecursive(File dir, String[] exts, List<File> out, int depth) {
@@ -213,19 +284,42 @@ public class KiwaNativeBridge {
 
     private String pendingAIContent = null;
     private String pendingName = null;
+    private String pendingTemplateAsset = null;  // asset name to seed a new file with
 
     @JavascriptInterface
     public void createFile(String type) {
         pendingAIContent = null;
         pendingName = null;
-        host.runOnUiThread(() -> host.createAndOpenFile(type));
+        pendingTemplateAsset = null;
+        host.runOnUiThread(() -> host.createAndOpenFile(type, null));
     }
 
     @JavascriptInterface
     public void createFileWithContent(String type, String content) {
         pendingAIContent = content;
         pendingName = deriveName(content);
-        host.runOnUiThread(() -> host.createAndOpenFile(type));
+        pendingTemplateAsset = null;
+        host.runOnUiThread(() -> host.createAndOpenFile(type, null));
+    }
+
+    /**
+     * Create a new file seeded with the content of a bundled template asset
+     * (e.g. "templates/modern_resume.docx"). The asset is copied to a
+     * temp file, then the editor is launched with that file as the source.
+     * After the SAF create dialog returns a target URI, the host will
+     * call consumePendingTemplateAsset() to get the asset name and copy
+     * the asset content into the user-chosen location.
+     */
+    @JavascriptInterface
+    public void createFileFromTemplate(String templateId, String type) {
+        // The template registry in JS already knows which asset belongs to
+        // which template id. We just stash the id so the host can resolve
+        // it via the template registry. For now we accept the asset path
+        // directly in the form "templates/<filename>".
+        pendingTemplateAsset = templateId;
+        pendingAIContent = null;
+        pendingName = null;
+        host.runOnUiThread(() -> host.createAndOpenFile(type, templateId));
     }
 
     /** Called by the host after the SAF create dialog returns a URI. */
@@ -240,6 +334,42 @@ public class KiwaNativeBridge {
         String n = pendingName;
         pendingName = null;
         return n;
+    }
+
+    /** Called by the host to know whether to seed the new file from a
+     *  bundled template asset. Returns the asset name (e.g. "templates/foo.docx")
+     *  or null. The host should call copyAssetToUri() with this name to
+     *  seed the new file. */
+    public String consumePendingTemplateAsset() {
+        String a = pendingTemplateAsset;
+        pendingTemplateAsset = null;
+        return a;
+    }
+
+    /** Copies an asset (relative path inside the assets dir) to a content
+     *  URI returned by the SAF create dialog. Used to seed a new file
+     *  with a bundled template. Returns true on success. */
+    public boolean copyAssetToUri(String assetName, Uri targetUri) {
+        InputStream is = null;
+        OutputStream os = null;
+        try {
+            is = activity.getAssets().open(assetName);
+            os = activity.getContentResolver().openOutputStream(targetUri, "wt");
+            if (os == null) {
+                os = activity.getContentResolver().openOutputStream(targetUri);
+            }
+            if (os == null) return false;
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) > 0) os.write(buf, 0, n);
+            os.flush();
+            return true;
+        } catch (IOException e) {
+            return false;
+        } finally {
+            try { if (is != null) is.close(); } catch (IOException ignored) {}
+            try { if (os != null) os.close(); } catch (IOException ignored) {}
+        }
     }
 
     private String deriveName(String content) {
@@ -264,6 +394,62 @@ public class KiwaNativeBridge {
     @JavascriptInterface
     public void importFile() {
         host.runOnUiThread(() -> host.importAndOpenFile());
+    }
+
+    /**
+     * Share a file via the Android share sheet. Takes the absolute file
+     * path (as returned by listFiles) and uses a FileProvider to grant
+     * read access to other apps.
+     */
+    @JavascriptInterface
+    public void shareFile(final String path) {
+        host.runOnUiThread(() -> {
+            try {
+                if (path == null || path.isEmpty()) {
+                    Toast.makeText(activity, "No file to share", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                File f = new File(path);
+                if (!f.exists()) {
+                    Toast.makeText(activity, "File not found", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                        activity,
+                        activity.getPackageName() + ".fileprovider",
+                        f);
+                Intent share = new Intent(Intent.ACTION_SEND);
+                share.setType("*/*");
+                share.putExtra(Intent.EXTRA_STREAM, uri);
+                share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                Intent chooser = Intent.createChooser(share, "Share " + f.getName());
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(chooser);
+            } catch (Exception e) {
+                Toast.makeText(activity, "Cannot share: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    /**
+     * Trigger a SAF "delete" intent for the given file. Currently we open
+     * the document in the editor's delete flow via DocumentsContract — but
+     * since Android SAF doesn't expose a single-file delete intent for
+     * arbitrary paths, we just open the system file picker so the user can
+     * delete from there. The simplest robust path is to delete the file
+     * directly via java.io.File.delete() — only call this for files the
+     * user explicitly asked to remove.
+     */
+    @JavascriptInterface
+    public boolean deleteFile(String path) {
+        if (path == null || path.isEmpty()) return false;
+        try {
+            File f = new File(path);
+            if (!f.exists()) return false;
+            return f.delete();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     // ==================== SETTINGS ====================
@@ -315,6 +501,139 @@ public class KiwaNativeBridge {
                 Toast.makeText(activity, "Cannot open link", Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    // ==================== TEMPLATE REGISTRY ====================
+    //
+    // We expose a single canonical list of bundled templates to JS so the
+    // HTML side does not need to maintain its own parallel array. The
+    // metadata (name, type, asset path) is generated at build time and
+    // shipped as `kiwa_templates.json` in the app assets.
+
+    @JavascriptInterface
+    public String listTemplates() {
+        try {
+            InputStream is = activity.getAssets().open("kiwa_templates.json");
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) > 0) baos.write(buf, 0, n);
+            is.close();
+            return baos.toString("UTF-8");
+        } catch (IOException e) {
+            // Fall back to an empty array so the UI doesn't break.
+            return "[]";
+        }
+    }
+
+    // ==================== AI TEMPLATE GENERATION ====================
+    //
+    // Premium feature: ask the AI to generate a complete document based on
+    // the user's natural-language prompt. The AI returns a structured
+    // document (markdown-like), which we then convert into editable
+    // content and pass to the editor via the existing pending-AI-content
+    // flow.
+
+    /**
+     * Asynchronously generate a document's content from a user prompt
+     * and the selected template type. The result is delivered back to
+     * JS via host.deliverAIResponse() so the UI can show a "Creating..."
+     * indicator and then trigger the SAF create dialog.
+     *
+     * @param callId     unique id used to match the response
+     * @param prompt     the user's natural-language request (e.g.
+     *                   "write me a professional resignation letter for
+     *                   a graphic designer with 4 years experience")
+     * @param type       "doc" | "sheet" | "slide"  (drives the file extension)
+     */
+    @JavascriptInterface
+    public void generateDocumentFromPrompt(final String callId, final String prompt, final String type) {
+        new Thread(() -> {
+            String result = generateDocumentFromPromptInternal(prompt, type);
+            host.deliverAIResponse(callId, result);
+        }).start();
+    }
+
+    /**
+     * Build the AI request, send it, and return the response as JSON
+     * {ok: true, content: "...", type: "..."} on success,
+     * {ok: false, error: "..."} on failure.
+     */
+    private String generateDocumentFromPromptInternal(String userPrompt, String type) {
+        try {
+            SharedPreferences sp = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            String settingsJson = sp.getString("json", "{}");
+            JSONObject settings = new JSONObject(settingsJson);
+            String provider = settings.optString("provider", "aevibron");
+            String apiKey = settings.optString("apiKey", "");
+            String baseUrl = settings.optString("baseUrl", "https://aevibron-gateway.vercel.app/api/v1");
+            String model = settings.optString("model", "aevibron-core-v3");
+
+            // Build a strong system prompt that produces a clean, editable
+            // document. We ask for plain markdown-ish text (no code fences)
+            // because the editor will receive it as plain text via
+            // .uno:InsertText.
+            String typeHint = "a Word document (.docx)";
+            if ("sheet".equals(type)) typeHint = "a spreadsheet (.xlsx) — produce one row per line, columns separated by | (pipe)";
+            else if ("slide".equals(type)) typeHint = "a presentation (.pptx) — start each slide with a # heading, then bullet points";
+
+            String systemPrompt =
+                "You are Kiwa AI, a document generator inside the Kiwa Studio office suite.\n" +
+                "The user is asking you to generate the content for " + typeHint + ".\n" +
+                "Produce complete, professional, ready-to-use content — not a stub.\n" +
+                "Rules:\n" +
+                "1. Output ONLY the document content. No preamble, no commentary, no markdown code fences.\n" +
+                "2. Use plain text formatting. Use blank lines between paragraphs.\n" +
+                "3. For headings, use a single # for H1, ## for H2, ### for H3.\n" +
+                "4. For bullet lists, use - prefix. For numbered lists, use 1. 2. 3.\n" +
+                "5. For tables, use markdown table syntax (| header | header |\\n|---|---|\\n| cell | cell |).\n" +
+                "6. Be specific and realistic — use real-sounding names, dates, numbers, and details where appropriate.\n" +
+                "7. Match the requested document type and the user's stated purpose.\n" +
+                "8. Aim for a complete document the user could actually use with minimal edits (300-1500 words for documents).\n" +
+                "9. Do not invent instructions for the user; just produce the content.";
+
+            JSONArray messages = new JSONArray();
+            JSONObject userMsg = new JSONObject();
+            userMsg.put("role", "user");
+            userMsg.put("content", userPrompt);
+            messages.put(userMsg);
+
+            JSONObject payload = new JSONObject();
+            payload.put("provider", provider);
+            payload.put("apiKey", apiKey);
+            payload.put("baseUrl", baseUrl);
+            payload.put("model", model);
+            payload.put("messages", messages);
+            payload.put("systemPrompt", systemPrompt);
+
+            String aiResponse = KiwaAI.request(payload.toString(), false);
+            JSONObject resp = new JSONObject(aiResponse);
+            if (!resp.optBoolean("ok", false)) {
+                return aiResponse;  // forward the error JSON
+            }
+            // Wrap the content for the JS side
+            JSONObject out = new JSONObject();
+            out.put("ok", true);
+            out.put("content", resp.optString("text", ""));
+            out.put("type", type);
+            out.put("provider", resp.optString("provider", provider));
+            out.put("model", resp.optString("model", model));
+            return out.toString();
+        } catch (Exception e) {
+            return errorJson("Template generation failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * After the AI has generated content and the user confirms, JS calls
+     * this to start the file-create flow with that content pre-loaded.
+     * Same as createFileWithContent, but with a separate name so the JS
+     * can attach UI feedback ("Generated by AI").
+     */
+    @JavascriptInterface
+    public void createFileWithAIContent(String type, String content) {
+        // Reuse the existing flow — same behavior, just a clearer JS API.
+        createFileWithContent(type, content);
     }
 
     // ==================== AI: NETWORK ====================

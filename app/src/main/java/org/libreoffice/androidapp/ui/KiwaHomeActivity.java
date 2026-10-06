@@ -136,6 +136,10 @@ public class KiwaHomeActivity extends AppCompatActivity {
     }
 
     public void createAndOpenFile(String type) {
+        createAndOpenFile(type, null);
+    }
+
+    public void createAndOpenFile(String type, String templateAsset) {
         String mime;
         String name;
         String ext;
@@ -156,6 +160,25 @@ public class KiwaHomeActivity extends AppCompatActivity {
                 name = "Untitled Document" + ext;
                 break;
         }
+        // If the user is creating a file from a template, derive the name
+        // from the template's asset name (e.g. "templates/modern_resume.docx"
+        // → "Modern Resume").
+        if (templateAsset != null && !templateAsset.isEmpty()) {
+            String base = templateAsset;
+            int slash = base.lastIndexOf('/');
+            if (slash >= 0) base = base.substring(slash + 1);
+            int dot = base.lastIndexOf('.');
+            if (dot > 0) base = base.substring(0, dot);
+            // Convert snake_case to Title Case
+            String[] parts = base.split("_");
+            StringBuilder sb = new StringBuilder();
+            for (String p : parts) {
+                if (p.isEmpty()) continue;
+                if (sb.length() > 0) sb.append(' ');
+                sb.append(Character.toUpperCase(p.charAt(0))).append(p.substring(1));
+            }
+            if (sb.length() > 0) name = sb.toString() + ext;
+        }
         // If the AI suggested a name, use it
         if (bridge != null) {
             String suggested = bridge.consumePendingName();
@@ -167,12 +190,16 @@ public class KiwaHomeActivity extends AppCompatActivity {
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType(mime);
         intent.putExtra(Intent.EXTRA_TITLE, name);
+        // Track which template asset (if any) was the source of this file.
+        pendingTemplateAsset = templateAsset;
         try {
             startActivityForResult(intent, REQ_CREATE);
         } catch (Exception e) {
             Toast.makeText(this, "Cannot create: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
+
+    private String pendingTemplateAsset = null;
 
     public void importAndOpenFile() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -204,14 +231,35 @@ public class KiwaHomeActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode != RESULT_OK || data == null) return;
+        if (resultCode != RESULT_OK || data == null) {
+            // User cancelled the SAF dialog — clear pending state.
+            if (bridge != null) {
+                bridge.consumePendingAIContent();
+                bridge.consumePendingName();
+                bridge.consumePendingTemplateAsset();
+            }
+            pendingTemplateAsset = null;
+            return;
+        }
         Uri uri = data.getData();
         if (uri == null) return;
 
         if (requestCode == REQ_CREATE) {
+            // If a template asset was queued, copy it to the new file
+            // before launching the editor. This makes the template content
+            // actually appear when the user opens the new file.
+            String tplAsset = pendingTemplateAsset;
+            pendingTemplateAsset = null;
+            if (tplAsset != null && !tplAsset.isEmpty() && bridge != null) {
+                boolean ok = bridge.copyAssetToUri(tplAsset, uri);
+                if (!ok) {
+                    Toast.makeText(this, "Could not load template content — opening blank file", Toast.LENGTH_LONG).show();
+                }
+            }
             Intent open = new Intent(this, org.libreoffice.androidlib.LOActivity.class);
             open.setAction(Intent.ACTION_EDIT);
             open.setData(uri);
+            open.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             if (bridge != null) {
                 String content = bridge.consumePendingAIContent();
                 if (content != null && !content.isEmpty()) {

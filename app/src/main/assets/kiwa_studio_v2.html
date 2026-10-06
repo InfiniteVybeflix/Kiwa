@@ -519,7 +519,7 @@
           <button class="qa-card" data-create="sheet"><div class="qa-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg></div><h4>Spreadsheet</h4><p>Data & formulas</p></button>
           <button class="qa-card" data-create="slide"><div class="qa-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/></svg></div><h4>Presentation</h4><p>Slides & decks</p></button>
           <button class="qa-card" data-view-target="templates"><div class="qa-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><h4>Template</h4><p>Start from gallery</p></button>
-          <button class="qa-card ai" data-ai-open="true"><div class="qa-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z"/></svg></div><h4>AI Generate</h4><p>Prompt to create</p></button>
+          <button class="qa-card ai" data-modal="aiGenerateModal"><div class="qa-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z"/></svg></div><h4>AI Generate</h4><p>Prompt to create</p></button>
 
         </div>
         <div class="sec">
@@ -556,7 +556,22 @@
       </div>
       <div class="view" data-view="templates">
         <div class="hero"><div><h1>Templates</h1><p>Start faster with professionally designed layouts.</p></div></div>
-        <div class="sec"><div class="temps" id="allTemps"></div></div>
+        <div class="sec">
+          <div class="sec-head">
+            <div class="tabs" id="templateCategoryTabs">
+              <div class="tab active" data-tcat="all">All</div>
+              <div class="tab" data-tcat="CVs">CVs</div>
+              <div class="tab" data-tcat="Letters">Letters</div>
+              <div class="tab" data-tcat="Invoices">Invoices</div>
+              <div class="tab" data-tcat="Reports">Reports</div>
+              <div class="tab" data-tcat="Plans">Plans</div>
+              <div class="tab" data-tcat="Meetings">Meetings</div>
+              <div class="tab" data-tcat="Presentations">Slides</div>
+              <div class="tab" data-tcat="Personal">Personal</div>
+            </div>
+          </div>
+          <div class="temps" id="allTemps"></div>
+        </div>
       </div>
     </div>
     <footer class="status">
@@ -613,7 +628,7 @@
   <ul>
     <li class="active" data-view-target="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg><span>Home</span></li>
     <li data-view-target="recent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Recent</span></li>
-    <li data-ai-open="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z"/></svg><span>Ask AI</span></li>
+    <li data-modal="aiGenerateModal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z"/></svg><span>AI Generate</span></li>
     <li data-view-target="starred"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l2.7 5.7 6.3.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.3-.9z"/></svg><span>Starred</span></li>
     <li data-modal="settingsModal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg><span>Settings</span></li>
   </ul>
@@ -713,6 +728,61 @@
     <div class="modal-body" id="shortcutsBody"></div>
   </div>
 </div>
+
+<!-- AI Generate Modal — premium "ask AI to create a document" flow -->
+<div class="modal" id="aiGenerateModal">
+  <div class="modal-box" style="max-width:620px">
+    <div class="modal-head">
+      <div class="ai-avatar" style="width:34px;height:34px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z"/></svg></div>
+      <h2 style="flex:1">Generate with AI</h2>
+      <button class="close" data-close="aiGenerateModal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="setting">
+        <label>What do you need?</label>
+        <textarea id="aiGenPrompt" placeholder="e.g. Write me a professional resignation letter for a graphic designer with 4 years experience at a creative agency..." style="width:100%;min-height:120px;max-height:200px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:0;line-height:1.5"></textarea>
+        <div class="hint" id="aiGenHint" style="margin-top:6px">Be specific — include the document type, your role, the audience, and any details you want included.</div>
+      </div>
+      <div class="setting">
+        <label>Document type</label>
+        <div class="segmented" id="aiGenType">
+          <div class="seg active" data-type="doc" style="flex:1">Document</div>
+          <div class="seg" data-type="sheet" style="flex:1">Spreadsheet</div>
+          <div class="seg" data-type="slide" style="flex:1">Presentation</div>
+        </div>
+      </div>
+      <div class="setting">
+        <label>Quick prompts</label>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button class="ai-gen-quick" data-prompt="Write a professional resignation letter for a software engineer with 6 years experience, citing personal reasons and offering a 4-week handover" data-type="doc" style="text-align:left;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12.5px;cursor:pointer">Resignation letter — engineer</button>
+          <button class="ai-gen-quick" data-prompt="Draft a modern resume for a marketing manager with 10 years FMCG experience in East Africa, strong in brand systems and team leadership" data-type="doc" style="text-align:left;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12.5px;cursor:pointer">Resume — marketing manager</button>
+          <button class="ai-gen-quick" data-prompt="Generate a Q4 2025 status report for a SaaS startup: revenue KES 142M (target 138M), 3 of 4 strategic initiatives launched, 99.94% uptime, one P1 outage in week 9" data-type="doc" style="text-align:left;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12.5px;cursor:pointer">Quarterly status report</button>
+          <button class="ai-gen-quick" data-prompt="Create a monthly budget spreadsheet for a Nairobi household earning KES 230,000 net, with categories for rent, food, transport, savings, school fees, and discretionary spending. Include a savings-rate formula." data-type="sheet" style="text-align:left;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12.5px;cursor:pointer">Monthly budget (Nairobi)</button>
+          <button class="ai-gen-quick" data-prompt="Generate a 7-slide investor pitch deck for Acme Foods, a mobile-first grocery delivery startup in Nairobi. Include: problem, solution, traction (3,400 MAU, KES 8.6M monthly revenue), business model, financial projections Y1-Y5, team, and the ask (KES 25M seed)." data-type="slide" style="text-align:left;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:12.5px;cursor:pointer">Pitch deck — startup</button>
+        </div>
+      </div>
+      <div id="aiGenResult" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:8px;max-height:240px;overflow:auto">
+        <div style="font-weight:600;color:var(--accent);font-size:13px;margin-bottom:8px" id="aiGenResultTitle">Generated ✓</div>
+        <pre id="aiGenResultPreview" style="font-size:11.5px;line-height:1.55;color:var(--text-2);white-space:pre-wrap;font-family:inherit;margin:0"></pre>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button id="aiGenCreateBtn" class="btn btn-primary" style="flex:1">Create & open</button>
+          <button id="aiGenRetryBtn" class="btn btn-ghost">Regenerate</button>
+          <button id="aiGenCancelBtn" class="btn btn-ghost">Cancel</button>
+        </div>
+      </div>
+      <div id="aiGenLoading" style="display:none;text-align:center;padding:30px 0">
+        <div style="display:inline-flex;align-items:center;gap:10px">
+          <span class="typing" style="display:inline-flex;gap:4px"><span></span><span></span><span></span></span>
+          <span style="font-size:13px;color:var(--text-2)" id="aiGenLoadingText">Generating your document...</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button id="aiGenSubmitBtn" class="btn btn-primary" style="flex:1;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 2l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z"/></svg>Generate</button>
+        <button class="btn btn-ghost" data-close="aiGenerateModal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="toasts" id="toasts"></div>
 <script>
 (function(){
@@ -727,9 +797,15 @@ var state = {
   aiHistory: [],
   _aiRestored: false,
   filter: { home: 'all', recent: 'all' },
+  templateCategory: 'all',  // for the Templates view tab filter
   files: [],
   selected: -1
 };
+
+// AI Generate modal state — declared early because renderTemplates
+// references it (the AI-fill button on template cards pre-fills the
+// modal's prompt and sets the doc type).
+var aiGenState = { type: 'doc', lastContent: null };
 
 /* ---- Toast ---- */
 function toast(msg, sub, type){
@@ -778,6 +854,10 @@ var templates = [
   {name:'Project Proposal', type:'doc', desc:'Formal document', color:'linear-gradient(135deg,#EF4444,#991B1B)'},
   {name:'Invoice', type:'doc', desc:'Bill clients fast', color:'linear-gradient(135deg,#EC4899,#9D174D)'}
 ];
+// ↑ Fallback only — used when the native bridge is not available (preview
+//   in a browser). The real list comes from KiwaNative.listTemplates().
+
+var realTemplates = null;  // populated on first load from the native bridge
 
 var aiPrompts = [
   {title:'Summarize document', desc:'Concise overview in seconds', prompt:'Summarize my latest document', icon:'doc'},
@@ -789,10 +869,22 @@ var aiPrompts = [
 ];
 
 /* ---- Render files ---- */
+// If a real first-page thumbnail (data: URL) is available, use it as the
+// background image of the thumb tile; otherwise fall back to the colored
+// gradient + icon. This makes PDFs immediately recognizable in the
+// Recent / Home / Starred grids.
 function fileCardHTML(f, idx){
+  var thumbStyle = '';
+  var thumbInner = thumbIcons[f.type] || '';
+  if (f.thumb && typeof f.thumb === 'string' && f.thumb.length > 0) {
+    // Real first-page thumbnail — replace the icon with the image,
+    // and keep a subtle badge in the corner.
+    thumbStyle = ' style="background-image:url(\'' + f.thumb + '\");background-size:cover;background-position:center"';
+    thumbInner = '';
+  }
   return '<div class="file" data-idx="' + idx + '">' +
-    '<div class="file-thumb ' + f.type + '">' +
-      (thumbIcons[f.type] || '') +
+    '<div class="file-thumb ' + f.type + '"' + thumbStyle + '>' +
+      thumbInner +
       '<span class="file-badge">' + (f.badge || f.type.toUpperCase()) + '</span>' +
       '<button class="file-star ' + (f.star ? 'on' : '') + '" data-star="' + idx + '">' +
         '<svg width="14" height="14" viewBox="0 0 24 24" fill="' + (f.star ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l2.7 5.7 6.3.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.3-.9z"/></svg>' +
@@ -827,6 +919,18 @@ function bindFileEvents(container){
       var f = state.files[+el.dataset.idx];
       if(f) openFile(f);
     });
+    // Long-press opens a small action sheet with Share + Star + Delete.
+    var pressTimer = null;
+    el.addEventListener('touchstart', function(e){
+      pressTimer = setTimeout(function(){
+        pressTimer = null;
+        var f = state.files[+el.dataset.idx];
+        if (f) showFileActionSheet(f, el);
+      }, 480);
+    }, {passive: true});
+    el.addEventListener('touchend', function(){ if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; } });
+    el.addEventListener('touchmove', function(){ if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; } });
+    el.addEventListener('touchcancel', function(){ if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; } });
   });
   $$('.file-star').forEach(function(el){
     if(!container.contains(el)) return;
@@ -839,6 +943,56 @@ function bindFileEvents(container){
       renderAll();
     });
   });
+}
+
+function showFileActionSheet(f, srcEl){
+  // Simple bottom-sheet-style menu
+  var sheet = document.createElement('div');
+  sheet.style.cssText = 'position:fixed;left:0;right:0;bottom:0;background:var(--bg-elev);border-top-left-radius:18px;border-top-right-radius:18px;border:1px solid var(--border);padding:8px 8px 16px;z-index:200;transform:translateY(100%);transition:transform .25s cubic-bezier(.4,0,.2,1);box-shadow:0 -10px 40px rgba(0,0,0,.5)';
+  var items = [
+    {label:'Open', ic:'▸', act:function(){ openFile(f); }},
+    {label:f.star?'Unstar':'Star', ic:'★', act:function(){
+      state.files[+srcEl.dataset.idx].star = !state.files[+srcEl.dataset.idx].star;
+      renderAll();
+    }},
+    {label:'Share', ic:'↗', act:function(){
+      if(hasNative() && KiwaNative.shareFile) KiwaNative.shareFile(f.path);
+      else toast('Share available in app', f.name, 'info');
+    }},
+    {label:'Delete', ic:'✕', danger:true, act:function(){
+      if(!confirm('Delete this file? This cannot be undone.')) return;
+      if(!hasNative() || !KiwaNative.deleteFile){ toast('Cannot delete in preview', '', 'error'); return; }
+      var ok = KiwaNative.deleteFile(f.path);
+      toast(ok ? 'Deleted' : 'Could not delete', f.name, ok ? 'success' : 'error');
+      if (ok) {
+        state.files = state.files.filter(function(x){ return x.path !== f.path; });
+        renderAll();
+      }
+    }},
+  ];
+  sheet.innerHTML = '<div style="width:44px;height:4px;background:var(--border);border-radius:2px;margin:8px auto 12px"></div>' +
+    items.map(function(it, i){
+      return '<button data-act="' + i + '" style="display:flex;align-items:center;gap:14px;width:100%;padding:12px 16px;background:transparent;border:0;color:' + (it.danger ? 'var(--err)' : 'var(--text)') + ';font-size:14px;font-weight:500;text-align:left;cursor:pointer;border-radius:9px">' +
+             '<span style="font-size:18px;width:24px;text-align:center">' + it.ic + '</span><span>' + it.label + '</span></button>';
+    }).join('');
+  var backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:199';
+  backdrop.addEventListener('click', closeSheet);
+  document.body.appendChild(backdrop);
+  document.body.appendChild(sheet);
+  // Animate in
+  setTimeout(function(){ sheet.style.transform = 'translateY(0)'; }, 10);
+  sheet.querySelectorAll('button[data-act]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var idx = +btn.dataset.act;
+      closeSheet();
+      items[idx].act();
+    });
+  });
+  function closeSheet(){
+    sheet.style.transform = 'translateY(100%)';
+    setTimeout(function(){ sheet.remove(); backdrop.remove(); }, 250);
+  }
 }
 
 function renderHomeFiles(){
@@ -871,16 +1025,61 @@ function renderStarredFiles(){
 function renderTemplates(sel){
   var c = $(sel);
   if(!c) return;
-  c.innerHTML = templates.map(function(t){
+  // Use the real template list from the native bridge if available;
+  // otherwise fall back to the inline placeholder list.
+  var list = realTemplates || templates;
+  // Apply category filter if rendering the full templates view
+  if (sel === '#allTemps' && state.templateCategory && state.templateCategory !== 'all') {
+    list = list.filter(function(t){
+      return (t.category || t.type) === state.templateCategory ||
+             (state.templateCategory === 'Presentations' && t.type === 'slide');
+    });
+  }
+  if (!list.length) {
+    c.innerHTML = '<div class="empty-state"><div class="big"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><h3>No templates here</h3><p>Pick another category or use a blank document.</p></div>';
+    return;
+  }
+  c.innerHTML = list.map(function(t){
+    var id = t.id || t.name;
+    var color = t.preview || t.color || 'linear-gradient(135deg,#475569,#1F2937)';
     var inner = (thumbIcons[t.type] || '').replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '');
-    return '<button class="temp" data-template="' + t.name + '">' +
-      '<div class="temp-prev" style="background:' + t.color + '"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5" opacity=".8">' + inner + '</svg></div>' +
-      '<h4>' + t.name + '</h4><p>' + t.desc + '</p></button>';
+    return '<button class="temp" data-template-id="' + escapeHtml(id) + '" data-template-type="' + escapeHtml(t.type) + '" data-template-name="' + escapeHtml(t.name) + '" data-template-desc="' + escapeHtml(t.description || t.desc || '') + '">' +
+      '<div class="temp-prev" style="background:' + color + '"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5" opacity=".8">' + inner + '</svg>' +
+        '<div class="temp-actions" style="position:absolute;bottom:8px;right:8px;display:flex;gap:6px">' +
+          '<button class="temp-ai-btn" data-action="ai-fill" data-template-id="' + escapeHtml(id) + '" data-template-type="' + escapeHtml(t.type) + '" data-template-name="' + escapeHtml(t.name) + '" data-template-desc="' + escapeHtml(t.description || t.desc || '') + '" title="Ask AI to fill this template" style="background:rgba(0,0,0,.6);border:1px solid rgba(255,184,0,.5);color:#FFB800;width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z"/></svg></button>' +
+        '</div>' +
+      '</div>' +
+      '<h4>' + escapeHtml(t.name) + '</h4><p>' + escapeHtml(t.description || t.desc || '') + '</p></button>';
   }).join('');
   $$('.temp', c).forEach(function(el){
-    el.addEventListener('click', function(){
-      toast('Creating from template', el.dataset.template, 'success');
-      createFile(el.dataset.template);
+    // Don't trigger the template-open when the user clicked the AI button
+    el.addEventListener('click', function(e){
+      if (e.target.closest('.temp-ai-btn')) return;
+      var id = el.dataset.templateId;
+      var type = el.dataset.templateType;
+      var name = el.dataset.templateName;
+      toast('Creating from template', name || id, 'success');
+      createFromTemplate(id, type);
+    });
+  });
+  // Wire the AI-fill buttons
+  $$('.temp-ai-btn', c).forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var name = btn.dataset.templateName;
+      var desc = btn.dataset.templateDesc;
+      var type = btn.dataset.templateType;
+      // Open the AI Generate modal with a pre-filled prompt asking the
+      // AI to fill this template with realistic content.
+      openModal('aiGenerateModal');
+      var ta = $('#aiGenPrompt');
+      ta.value = 'Fill in the "' + name + '" template with realistic, professional content. ' + (desc ? 'Template purpose: ' + desc + '.' : '');
+      // Set the type
+      $$('#aiGenType .seg').forEach(function(x){
+        x.classList.toggle('active', x.dataset.type === type);
+      });
+      aiGenState.type = type;
+      ta.focus();
     });
   });
 }
@@ -1010,6 +1209,34 @@ function createFile(type){
     KiwaNative.createFile(type);
   } else {
     toast('Creating (preview)', type, 'info');
+  }
+}
+// Create a new file seeded with the content of a bundled template asset.
+// `templateId` is the stable id (e.g. "modern_resume"); we resolve it to
+// the asset path through `realTemplates`. The native side then opens the
+// SAF create dialog, copies the asset to the chosen URI, and launches
+// the editor with that file as the source.
+function createFromTemplate(templateId, type){
+  if(!hasNative() || !KiwaNative.createFileFromTemplate){
+    toast('Preview mode', 'Templates available in the app', 'info');
+    return;
+  }
+  // Resolve id → asset path through realTemplates if available
+  var assetPath = null;
+  if(realTemplates){
+    for(var i = 0; i < realTemplates.length; i++){
+      if(realTemplates[i].id === templateId){ assetPath = realTemplates[i].asset; break; }
+    }
+  }
+  if(!assetPath){
+    // Fall back: assume the asset path is "templates/<id>.<ext>"
+    var ext = (type === 'sheet') ? 'xlsx' : (type === 'slide') ? 'pptx' : 'docx';
+    assetPath = 'templates/' + templateId + '.' + ext;
+  }
+  try {
+    KiwaNative.createFileFromTemplate(assetPath, type);
+  } catch(e){
+    toast('Cannot create from template', e.message, 'error');
   }
 }
 function loadSettings(){
@@ -1457,6 +1684,130 @@ document.addEventListener('DOMContentLoaded', function(){
   $$('[data-close]').forEach(function(el){ el.addEventListener('click', function(){ closeModal(el.dataset.close); }); });
   $$('.modal').forEach(function(m){ m.addEventListener('click', function(e){ if(e.target === m) m.classList.remove('open'); }); });
 
+  // ====== AI Generate Modal ======
+  // Premium "ask AI to create a document" flow. The user types a natural-
+  // language prompt, picks a doc type, and we call the native bridge's
+  // generateDocumentFromPrompt() to send a structured request to the AI.
+  // The AI's content is shown as a preview; on confirm, we trigger the
+  // SAF create dialog with the content pre-loaded — same flow as
+  // createFileWithContent, so the editor opens with the AI content
+  // inserted at the cursor.
+  // (aiGenState is declared near the top of the script.)
+  $$('#aiGenType .seg').forEach(function(seg){
+    seg.addEventListener('click', function(){
+      $$('#aiGenType .seg').forEach(function(x){ x.classList.remove('active'); });
+      seg.classList.add('active');
+      aiGenState.type = seg.dataset.type;
+    });
+  });
+  $$('.ai-gen-quick').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var ta = $('#aiGenPrompt');
+      ta.value = btn.dataset.prompt;
+      // also set the doc type to match the quick prompt's suggestion
+      var qt = btn.dataset.type;
+      if (qt) {
+        $$('#aiGenType .seg').forEach(function(x){
+          x.classList.toggle('active', x.dataset.type === qt);
+        });
+        aiGenState.type = qt;
+      }
+      ta.focus();
+    });
+  });
+
+  function aiGenSetLoading(loading, msg){
+    var loadingEl = $('#aiGenLoading');
+    var resultEl = $('#aiGenResult');
+    var submitBtn = $('#aiGenSubmitBtn');
+    if (loading){
+      loadingEl.style.display = 'block';
+      resultEl.style.display = 'none';
+      if (msg) $('#aiGenLoadingText').textContent = msg;
+      submitBtn.disabled = true;
+      submitBtn.style.opacity = '0.6';
+    } else {
+      loadingEl.style.display = 'none';
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = '1';
+    }
+  }
+
+  function aiGenShowResult(content){
+    aiGenState.lastContent = content;
+    var resultEl = $('#aiGenResult');
+    var previewEl = $('#aiGenResultPreview');
+    var titleEl = $('#aiGenResultTitle');
+    var typeLabel = aiGenState.type === 'sheet' ? 'spreadsheet' : aiGenState.type === 'slide' ? 'presentation' : 'document';
+    titleEl.textContent = 'Generated ' + typeLabel + ' ✓';
+    previewEl.textContent = content.length > 4000 ? content.substring(0, 4000) + '\n\n… (' + (content.length - 4000) + ' more characters)' : content;
+    resultEl.style.display = 'block';
+  }
+
+  function aiGenSubmit(){
+    var prompt = ($('#aiGenPrompt').value || '').trim();
+    if (!prompt){
+      toast('Enter a prompt', 'Tell me what document you need', 'error');
+      $('#aiGenPrompt').focus();
+      return;
+    }
+    if (!hasNative() || !KiwaNative.generateDocumentFromPrompt){
+      toast('AI generation in app', 'This feature is available in the Kiwa app', 'info');
+      return;
+    }
+    aiGenSetLoading(true, 'Generating your ' + (aiGenState.type === 'sheet' ? 'spreadsheet' : aiGenState.type === 'slide' ? 'presentation' : 'document') + '...');
+    $('#aiGenResult').style.display = 'none';
+    var id = 'aigen_' + (++state.callSeq) + '_' + Date.now();
+    state.pendingAI[id] = { resolve: function(r){
+      aiGenSetLoading(false);
+      if (r && r.ok && r.content){
+        aiGenShowResult(r.content);
+        toast('Document generated', 'Tap "Create & open" to save it', 'success');
+      } else {
+        toast('Generation failed', (r && r.error) || 'Unknown error', 'error');
+      }
+    } };
+    try {
+      KiwaNative.generateDocumentFromPrompt(id, prompt, aiGenState.type);
+    } catch(e){
+      delete state.pendingAI[id];
+      aiGenSetLoading(false);
+      toast('Cannot reach AI', e.message, 'error');
+    }
+    // Safety timeout (95s) — same as the AI chat
+    setTimeout(function(){
+      if (state.pendingAI[id]){
+        delete state.pendingAI[id];
+        aiGenSetLoading(false);
+        toast('Generation timed out', 'Try again or check your connection', 'error');
+      }
+    }, 95000);
+  }
+
+  if ($('#aiGenSubmitBtn')) $('#aiGenSubmitBtn').addEventListener('click', aiGenSubmit);
+  if ($('#aiGenRetryBtn')) $('#aiGenRetryBtn').addEventListener('click', function(){
+    if (!aiGenState.lastContent) return;
+    aiGenSubmit();  // re-submits with the same prompt + type
+  });
+  if ($('#aiGenCancelBtn')) $('#aiGenCancelBtn').addEventListener('click', function(){
+    $('#aiGenResult').style.display = 'none';
+    aiGenState.lastContent = null;
+  });
+  if ($('#aiGenCreateBtn')) $('#aiGenCreateBtn').addEventListener('click', function(){
+    if (!aiGenState.lastContent) return;
+    if (!hasNative() || !KiwaNative.createFileWithAIContent){
+      toast('Cannot create', 'Native bridge unavailable', 'error');
+      return;
+    }
+    try {
+      KiwaNative.createFileWithAIContent(aiGenState.type, aiGenState.lastContent);
+      closeModal('aiGenerateModal');
+      toast('Opening editor', 'Your AI-generated document is ready', 'success');
+    } catch(e){
+      toast('Cannot create', e.message, 'error');
+    }
+  });
+
   // Theme
   $$('.seg[data-theme]').forEach(function(o){
     o.addEventListener('click', function(){
@@ -1659,6 +2010,17 @@ document.addEventListener('DOMContentLoaded', function(){
     });
   });
 
+  // Template category filter (Templates view)
+  $$('.tab[data-tcat]').forEach(function(t){
+    t.addEventListener('click', function(){
+      var parent = t.closest('.tabs');
+      if(parent) parent.querySelectorAll('.tab').forEach(function(x){ x.classList.remove('active'); });
+      t.classList.add('active');
+      state.templateCategory = t.dataset.tcat;
+      renderTemplates('#allTemps');
+    });
+  });
+
   // Command palette
   var cmdBtn = $('#cmdBtn');
   var palette = $('#paletteOverlay');
@@ -1796,6 +2158,20 @@ document.addEventListener('DOMContentLoaded', function(){
   }
   refreshStorage();
   window.KiwaRefreshStorage = refreshStorage;
+
+  // Load the real template list from the native bridge (if available) and
+  // re-render the template grids so they show the bundled templates with
+  // real content (instead of the placeholder fallback above).
+  if (hasNative() && KiwaNative.listTemplates) {
+    try {
+      var list = JSON.parse(KiwaNative.listTemplates());
+      if (list && list.length) {
+        realTemplates = list;
+        renderTemplates('#homeTemps');
+        renderTemplates('#allTemps');
+      }
+    } catch(e) { /* fall back to inline list */ }
+  }
 
   // Seed chat + render everything
   try { renderConversation(); } catch(e) { try { seedChat(); } catch(e2){} }
