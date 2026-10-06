@@ -229,13 +229,30 @@
   }
 
   function openPanel() {
+    // reset drag-injected styles so the panel starts at its proper place
+    panel.style.top = '';
+    panel.style.bottom = '';
+    panel.style.transform = '';
+    panel.style.maxHeight = '';
     panel.classList.add('open');
     overlay.classList.add('open');
-    setTimeout(function() { input.focus(); }, 300);
+    setTimeout(function() {
+      input.focus();
+      if(window.KiwaEditorAdjustKeyboard) window.KiwaEditorAdjustKeyboard();
+    }, 300);
+    setTimeout(function(){
+      if(window.KiwaEditorAdjustKeyboard) window.KiwaEditorAdjustKeyboard();
+    }, 700);
   }
   function closePanel() {
     panel.classList.remove('open');
     overlay.classList.remove('open');
+    // Reset any inline styles injected by dragging so the panel returns
+    // to its normal bottom-anchored layout next time it opens.
+    panel.style.top = '';
+    panel.style.bottom = '';
+    panel.style.transform = '';
+    panel.style.maxHeight = '';
   }
 
   // Make FAB draggable — tap opens the panel, drag repositions it
@@ -373,76 +390,122 @@
   installSocketWatcher();
 
   function extractStructure(){
+    // Try the direct DOM reader first (fast). If it returns nothing,
+    // fall back to the SelectAll strategy which works even when the editor
+    // is rendering tiles instead of DOM text.
     return new Promise(function(resolve){
-      // The server-side extract API isn't reachable from the mobile WebView
-      // (it needs a document URL, not 'interactive'). We try the socket once
-      // for good measure, then fall back to reading the visible document text
-      // directly from the DOM. The fallback returns a simpler structure but
-      // is real and works everywhere.
-      var sent = false;
-      try {
-        if (window.app && window.app.socket && window.app.socket.sendMessage) {
-          window.app.socket.sendMessage('extractdocumentstructure url=interactive');
-          sent = true;
-        }
-      } catch(e) {}
-
-      if (sent) {
-        extractionResolvers.push(function(json){
-          if (json) { resolve(json); return; }
-          resolve(readDocumentFromDom());
-        });
-        setTimeout(function(){
-          var idx = extractionResolvers.length - 1;
-          if (idx >= 0) {
-            // still pending — fall through to DOM reader
-            try { resolve(readDocumentFromDom()); } catch(e){ resolve(null); }
-          }
-        }, 6000);
-      } else {
-        resolve(readDocumentFromDom());
-      }
+      var direct = null;
+      try { direct = readDocumentFromDom(); } catch(e){}
+      if (direct) { resolve(direct); return; }
+      extractViaSelectAll().then(function(viaSel){
+        if (viaSel) { resolve(viaSel); return; }
+        resolve(null);
+      });
     });
   }
 
   function readDocumentFromDom(){
+    // Collabora renders tiles, not DOM text. To get the document content we
+    // use the editor's own APIs. Several fallbacks in case one is unavailable.
+
+    // Strategy 1: app.map.getDocText() — some builds expose this directly
     try {
-      // Collabora renders each text run as an element. Grab all visible text.
-      // Different builds use different class names; try several.
-      var selectors = [
-        '.text-run',
-        '[class*="text-run"]',
-        '.Paragraph',
-        '.paragraph',
-        '.TextParagraph',
-        '[class*="Paragraph"]'
-      ];
+      if (window.app && window.app.map && typeof window.app.map.getDocText === 'function') {
+        var t = window.app.map.getDocText();
+        if (t && t.length) return buildStructure(t);
+      }
+    } catch(e) {}
+
+    // Strategy 2: getSelectionText on the map object
+    try {
+      if (window.app && window.app.map && typeof window.app.map.getSelectionText === 'function') {
+        var t2 = window.app.map.getSelectionText();
+        if (t2 && t2.length) return buildStructure(t2);
+      }
+    } catch(e) {}
+
+    // Strategy 3: global selection
+    try {
+      var s = window.getSelection();
+      if (s && s.toString() && s.toString().length > 2) {
+        return buildStructure(s.toString());
+      }
+    } catch(e) {}
+
+    // Strategy 4: read the raw text nodes (fallback — may be empty if tiles only)
+    try {
+      var selectors = ['.text-run','[class*="text-run"]','.Paragraph','.paragraph'];
       var parts = [];
-      for (var s = 0; s < selectors.length; s++) {
-        var nodes = document.querySelectorAll(selectors[s]);
-        if (nodes.length > 0) {
-          for (var i = 0; i < nodes.length; i++) {
-            var t = (nodes[i].innerText || nodes[i].textContent || '').trim();
-            if (t) parts.push(t);
-          }
-          if (parts.length > 0) break;
+      for (var i = 0; i < selectors.length; i++) {
+        var nodes = document.querySelectorAll(selectors[i]);
+        for (var n = 0; n < nodes.length; n++) {
+          var txt = (nodes[n].innerText || nodes[n].textContent || '').trim();
+          if (txt) parts.push(txt);
         }
+        if (parts.length) break;
       }
-      // Final fallback — the visible text of the document area
-      if (parts.length === 0) {
-        var area = document.querySelector('.leaflet-container') || document.body;
-        var all = (area.innerText || '').split('\n').map(function(x){ return x.trim(); }).filter(function(x){ return x.length > 0; });
-        parts = all.slice(0, 200);
+      if (parts.length) return buildStructure(parts.join('\\n'));
+    } catch(e) {}
+
+    // Strategy 5: leaflet container text
+    try {
+      var area = document.querySelector('.leaflet-container') || document.body;
+      var all = (area.innerText || '').split('\\n').map(function(x){ return x.trim(); }).filter(function(x){ return x.length > 0; });
+      if (all.length > 3) return buildStructure(all.join('\\n'));
+    } catch(e) {}
+
+    return null;
+  }
+
+  function buildStructure(raw){
+    if (!raw) return null;
+    var lines = raw.split(/\r?\n/).map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; });
+    if (!lines.length) return null;
+    var out = {
+      DocStructure: {
+        Note: 'Extracted from the document text.',
+        LineCount: lines.length,
+        Lines: {}
       }
-      // Build a pseudo-structure that the AI can reason about
-      var out = { DocStructure: { Note: 'Extracted from rendered DOM (server extract API unavailable on mobile).', Lines: {} } };
-      for (var j = 0; j < parts.length && j < 200; j++) {
-        out.DocStructure.Lines['Line.' + j] = { content: parts[j], type: 'text' };
-      }
-      return JSON.stringify(out);
-    } catch(e){
-      return null;
+    };
+    var max = Math.min(lines.length, 300);
+    for (var i = 0; i < max; i++) {
+      out.DocStructure.Lines['Line.' + i] = { content: lines[i] };
     }
+    return JSON.stringify(out);
+  }
+
+  // Add a special "select all then extract" strategy when the user taps Read document.
+  // It briefly selects everything, reads, then deselects.
+  function extractViaSelectAll(){
+    return new Promise(function(resolve){
+      var s = window.app && window.app.socket;
+      if (!s || !s.sendMessage) { resolve(null); return; }
+      // Select all
+      try {
+        s.sendMessage('uno .uno:SelectAll');
+      } catch(e){ resolve(null); return; }
+      // Give it a moment to select
+      setTimeout(function(){
+        // Try to grab selection via a couple of entry points
+        var text = '';
+        try {
+          if (window.app && window.app.map && typeof window.app.map.getSelectionText === 'function') {
+            text = window.app.map.getSelectionText() || '';
+          }
+        } catch(e){}
+        if (!text) {
+          try {
+            var sel = window.getSelection();
+            if (sel) text = sel.toString() || '';
+          } catch(e){}
+        }
+        // Collapse the selection back to just the cursor
+        try { s.sendMessage('uno .uno:GoToStartOfDoc'); } catch(e){}
+        if (text && text.length > 1) resolve(buildStructure(text));
+        else resolve(null);
+      }, 500);
+    });
   }
 
   function readDocumentAndDisplay(){
@@ -794,8 +857,14 @@
       window.visualViewport.addEventListener('resize', adjust);
       window.visualViewport.addEventListener('scroll', adjust);
     }
-    inputEl.addEventListener('focus', function(){ setTimeout(adjust, 120); });
+    inputEl.addEventListener('focus', function(){
+      setTimeout(adjust, 120);
+      setTimeout(adjust, 300);
+      setTimeout(adjust, 600);
+    });
     inputEl.addEventListener('blur', function(){ setTimeout(adjust, 120); });
+    // expose so openPanel can force an adjustment
+    window.KiwaEditorAdjustKeyboard = adjust;
   })();
 
   // ============ VIEWPORT META (keyboard resize) ============

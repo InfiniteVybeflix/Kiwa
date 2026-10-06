@@ -212,16 +212,19 @@ public class KiwaNativeBridge {
     }
 
     private String pendingAIContent = null;
+    private String pendingName = null;
 
     @JavascriptInterface
     public void createFile(String type) {
         pendingAIContent = null;
+        pendingName = null;
         host.runOnUiThread(() -> host.createAndOpenFile(type));
     }
 
     @JavascriptInterface
     public void createFileWithContent(String type, String content) {
         pendingAIContent = content;
+        pendingName = deriveName(content);
         host.runOnUiThread(() -> host.createAndOpenFile(type));
     }
 
@@ -230,6 +233,32 @@ public class KiwaNativeBridge {
         String c = pendingAIContent;
         pendingAIContent = null;
         return c;
+    }
+
+    /** Called by the host when choosing a filename for a new file. */
+    public String consumePendingName() {
+        String n = pendingName;
+        pendingName = null;
+        return n;
+    }
+
+    private String deriveName(String content) {
+        if (content == null || content.isEmpty()) return null;
+        String[] lines = content.split("\\r?\\n");
+        for (String line : lines) {
+            String t = line.trim();
+            if (t.isEmpty()) continue;
+            // strip markdown heading markers
+            t = t.replaceAll("^#+\\s*", "");
+            // strip leading list markers
+            t = t.replaceAll("^[\\*\\-0-9.\\)]+\\s+", "");
+            // cap length
+            if (t.length() > 40) t = t.substring(0, 40).trim();
+            // remove filename-invalid characters
+            t = t.replaceAll("[/\\\\:*?\"<>|]", "");
+            if (!t.isEmpty()) return t;
+        }
+        return null;
     }
 
     @JavascriptInterface

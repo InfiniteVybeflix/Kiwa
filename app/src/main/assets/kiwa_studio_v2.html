@@ -1025,7 +1025,10 @@ function saveSettings(obj){
 }
 
 /* ---- AI panel ---- */
-function openAI(){ app.classList.add('ai-open'); }
+function openAI(){
+  app.classList.add('ai-open');
+  setTimeout(function(){ if(window.KiwaHomeAdjustKeyboard) window.KiwaHomeAdjustKeyboard(); }, 400);
+}
 function closeAI(){ app.classList.remove('ai-open'); }
 function seedChat(){
   var c = $('#aiChat');
@@ -1391,6 +1394,41 @@ document.addEventListener('DOMContentLoaded', function(){
   if(histBackdrop) histBackdrop.addEventListener('click', closeHistoryDrawer);
   var newChatBtn = $('#newChatBtn');
   if(newChatBtn) newChatBtn.addEventListener('click', startNewChat);
+
+  // ============ HOME AI PANEL: KEYBOARD LIFT ============
+  // When the soft keyboard opens, lift the AI panel so the input stays visible.
+  (function(){
+    var panelEl = document.querySelector('.ai-panel');
+    var inputEl = document.getElementById('aiInput');
+    var chatEl = document.getElementById('aiChat');
+    if(!panelEl || !inputEl) return;
+
+    function adjust(){
+      if(!window.visualViewport) return;
+      var vv = window.visualViewport;
+      var kbHeight = window.innerHeight - vv.height - vv.offsetTop;
+      if(kbHeight > 80){
+        panelEl.style.bottom = kbHeight + 'px';
+        panelEl.style.maxHeight = Math.max(180, vv.height - 40) + 'px';
+        if(chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+      } else {
+        panelEl.style.bottom = '0px';
+        panelEl.style.maxHeight = '';
+      }
+    }
+
+    if(window.visualViewport){
+      window.visualViewport.addEventListener('resize', adjust);
+      window.visualViewport.addEventListener('scroll', adjust);
+    }
+    inputEl.addEventListener('focus', function(){
+      setTimeout(adjust, 120);
+      setTimeout(adjust, 300);
+      setTimeout(adjust, 600);
+    });
+    inputEl.addEventListener('blur', function(){ setTimeout(adjust, 120); });
+    window.KiwaHomeAdjustKeyboard = adjust;
+  })();
 
   var aiClose = $('#aiClose'); if(aiClose) aiClose.addEventListener('click', closeAI);
   var sbAI = $('#sbAI'); if(sbAI) sbAI.addEventListener('click', openAI);

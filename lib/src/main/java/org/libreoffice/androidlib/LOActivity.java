@@ -1055,26 +1055,26 @@ public class LOActivity extends AppCompatActivity {
         if (pendingAIContent == null || pendingAIContent.isEmpty()) return;
         final String content = pendingAIContent;
         pendingAIContent = null;
-        // small delay so the editor is fully interactive
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             try {
-                String escaped = content.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
-                String uno = ".uno:InsertText";
-                String args = "\"text\":{\"type\":\"string\",\"value\":\"" + escaped + "\"}";
-                String msg = "uno " + uno + " " + args;
-                if (mWebView != null) {
-                    mWebView.post(() -> {
-                        try {
-                            mWebView.evaluateJavascript(
-                                "try{ if(window.socket&&window.socket.sendMessage){window.socket.sendMessage(" + org.json.JSONObject.quote(msg) + ");} }catch(e){}",
-                                null);
-                        } catch (Exception ignored) {}
-                    });
+                if (!documentLoaded) {
+                    Log.w(TAG, "insertPendingAIContent: document not yet loaded, retrying");
+                    pendingAIContent = content;
+                    insertPendingAIContent();
+                    return;
                 }
+                String escaped = content
+                        .replace("\\", "\\\\")
+                        .replace("\"", "\\\"")
+                        .replace("\n", "\\n")
+                        .replace("\r", "");
+                String msg = "uno .uno:InsertText text=\"" + escaped + "\"";
+                callFakeWebsocketOnMessage(msg);
+                Log.i(TAG, "insertPendingAIContent: sent " + msg.length() + " chars");
             } catch (Exception e) {
                 Log.e(TAG, "insertPendingAIContent failed: " + e.getMessage());
             }
-        }, 1500);
+        }, 2500);
     }
 
     @Override
@@ -1347,7 +1347,17 @@ public class LOActivity extends AppCompatActivity {
 
         finalUrlToLoad += "&lang=" + language;
 
-        if (isDocEditable) {
+        // PDFs only support comment mode in Collabora, not full edit.
+        // Sending permission=edit makes the server return broken tiles.
+        String mimeForPerm = getMimeType();
+        String pathForPerm = getIntent().getData() != null ? getIntent().getData().getPath() : null;
+        boolean isPdfDoc = (mimeForPerm != null && mimeForPerm.equals("application/pdf"))
+                || (pathForPerm != null && pathForPerm.toLowerCase(java.util.Locale.US).endsWith(".pdf"));
+
+        if (isPdfDoc) {
+            finalUrlToLoad += "&permission=view_comment";
+            isDocEditable = false;
+        } else if (isDocEditable) {
             finalUrlToLoad += "&permission=edit";
         } else {
             finalUrlToLoad += "&permission=readonly";

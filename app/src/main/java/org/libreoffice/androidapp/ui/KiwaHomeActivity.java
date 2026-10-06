@@ -138,19 +138,30 @@ public class KiwaHomeActivity extends AppCompatActivity {
     public void createAndOpenFile(String type) {
         String mime;
         String name;
+        String ext;
         switch (type == null ? "" : type) {
             case "sheet":
                 mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-                name = "Untitled Spreadsheet.xlsx";
+                ext = ".xlsx";
+                name = "Untitled Spreadsheet" + ext;
                 break;
             case "slide":
                 mime = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-                name = "Untitled Presentation.pptx";
+                ext = ".pptx";
+                name = "Untitled Presentation" + ext;
                 break;
             default:
                 mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-                name = "Untitled Document.docx";
+                ext = ".docx";
+                name = "Untitled Document" + ext;
                 break;
+        }
+        // If the AI suggested a name, use it
+        if (bridge != null) {
+            String suggested = bridge.consumePendingName();
+            if (suggested != null && !suggested.isEmpty()) {
+                name = suggested + ext;
+            }
         }
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
